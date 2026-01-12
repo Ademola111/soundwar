@@ -1,0 +1,117 @@
+{% extends 'user/base.html' %}
+{% block title %}
+Styleit | Subscription
+{% endblock %}
+
+{% block content %}
+<div class="container-flluid">
+    <div class="row">
+        <div class="col">
+            <span>
+                {% with m = get_flashed_messages(with_categories=true) %}
+                    {% for c, i in m %}
+                        {% if c == 'success' %}
+                        <P class="alert alert-success fw-4">{{i}} </P>
+                        {% elif c == 'warning' %}
+                        <P class="alert alert-warning fw-4">{{i}} </P>
+                        {% else %}
+                        <P class="alert alert-danger fw-4">{{i}} </P>
+                        {% endif %}
+                    {% endfor %} 
+                {% endwith %}
+            </span>
+        </div>
+    </div>
+    <div class="row">
+        <div class="col-md-12 text-center mt-3">
+            <h4>Subscription Plans</h4>
+        </div>
+        <div class="row">
+            <div class="col-md-3 mt-3 mb-3" style="background-color: rgba(190, 190, 216, 0.521);">
+                <div class="mt-3 mb-3 text-center">
+                <h3>Monthly Plan</h3>
+                <span class="mt-2 mb-2">No discount benefits</span><br>
+                <span class="mt-2 mb-2">N600.00</span><br>
+                <span class="btn btn-success mt-2 mb-2"><a href="{{url_for('subscribe')}}"> Subscribe Now</a></span>
+                </div>
+            </div>
+            <div class="col-md-3 mt-3 mb-3" style="background-color: rgba(134, 134, 240, 0.521);">
+                <div class="mt-3 mb-3 text-center">
+                <h3>Quarterly Plan</h3>
+                <span class="mt-2 mb-2">Enjoy 10% discount</span><br>
+                <span class="mt-2 mb-2">N1,550.00</span><br>
+                <span class="btn btn-success mt-2 mb-2"><a href="{{url_for('subscribe')}}"> Subscribe Now</a></span>
+                </div>
+            </div>
+            <div class="col-md-3 mt-3 mb-3" style="background-color: rgba(190, 190, 216, 0.521);">
+                <div class="mt-3 mb-3 text-center">
+                <h3>Half Year Plan</h3>
+                <span class="mt-2 mb-2">Enjoy 20% discount</span><br>
+                <span class="mt-2 mb-2">N2,700.00</span><br>
+                <span class="btn btn-success mt-2 mb-2"><a href="{{url_for('subscribe')}}"> Subscribe Now</a></span>
+                </div>
+            </div>
+            <div class="col-md-3 mt-3 mb-3" style="background-color:  rgba(134, 134, 240, 0.521);">
+                <div class="mt-3 mb-3 text-center">
+                <h3>Yearly Plan</h3>
+                <span class="mt-2 mb-2">Enjoy 30% discount</span><br>
+                <span class="mt-2 mb-2">N4750.00</span><br>
+                <span class="btn btn-success mt-2 mb-2"><a href="{{url_for('subscribe')}}"> Subscribe Now</a></span>
+                </div>
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="col-md-12 text-center"><h4>Subscription Details</h4></div>
+            {% if sublist %}
+            <div class="col-md-12 m-2 text-center">
+                <div class="row">
+                    <div class="col-md-2"><p><strong>Date</strong></p></div>
+                    <div class="col-md-2"><p><strong>Plan Type</strong></p></div>
+                    <div class="col-md-2"><p><strong>Start Date</strong></p></div>
+                    <div class="col-md-2"><p><strong>End Date</strong></p></div>
+                    <div class="col-md-2"><p><strong>Payment Status</strong></p></div>
+                    <div class="col-md-2"><p><strong>Sub Status</strong></p></div>
+                </div>
+                {% for sub in sublist.items %}
+                <div class="row">
+                    <div class="col-md-2"><p>{{sub.sub_date}}</p></div>
+                    <div class="col-md-2"><p>{{sub.sub_plan}}</p></div>
+                    <div class="col-md-2"><p>{{sub.sub_startdate}}</p></div>
+                    <div class="col-md-2"><p>{{sub.sub_enddate}}</p></div>
+                    <div class="col-md-2"><p>{{sub.sub_paystatus}}</p></div>
+                    <div class="col-md-2"><p>{{sub.sub_status}}</p></div>
+                </div>
+                {% endfor %}
+                <!-- pagination links -->
+                <div class="text-center mt-3">
+                    <a href="{{url_for('subplan', page=sublist.prev_num)}}" class="btn btn-outline-primary {% if sublist.page ==  1 %} disabled {% endif %}">&laquo;</a>
+                    <!-- looping through the number of pages to display a link for each -->
+                    {% for page_num in sublist.iter_pages(left_edge=1, right_edge=1, left_current=1, right_current=2) %}
+
+                    {% if page_num %}
+                    <!-- check for active page and set the link to active -->
+                        {% if sublist.page == page_num %}
+                        <a href="{{url_for('subplan', page=page_num)}}" class="btn btn-outline-dark">{{page_num}}</a>
+                        {% else %}
+                        <a href="{{url_for('subplan', page=page_num)}}" class="btn btn-outline-dark">{{page_num}}</a>
+                        {% endif %}
+                    {% else %}
+                    ...
+                    {% endif %}
+                    {% endfor %}
+                    <a href="{{url_for('subplan', page=sublist.next_num)}}" class="btn btn-outline-primary {% if sublist.page ==  sublist.pages %} disabled {% endif %}">&raquo;</a>
+                    <p class="text-right mt-3">Showing Page {{sublist.page}} of {{sublist.pages}}</p>
+                </div>
+                <!-- end pagination -->
+            </div>
+            
+            {% else %}
+            <div class="col-md-3">
+                <p> Oopps! You dont have a Subscription yet. Subcribe from the plan above.</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

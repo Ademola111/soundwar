@@ -1,0 +1,36 @@
+{% extends 'admin/base.html' %}
+
+{% block title %}
+Styleit | Staff Activity
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-md-12 text-center">
+            <table class="table table-striped table-hover">
+                <thead>
+                    <tr class="table-success">
+                    <th class="table-dark" rowspan="2">S/N</th>
+                    <th class="table-danger" rowspan="2">Names</th>
+                    <th class="table-primary">Activities for the {{month}}{% if month==1 %}st{% elif month == 2 %}nd{% elif month == 3 %}rd{% else %}th{% endif %} Month in {{year}}</th>
+                    </tr>
+                    <tr>
+                    <th class="table-dark">Month</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for x, y in result %}
+                    <tr class="table-success">
+                    <td class="table-info">{{loop.index}}</td>
+                    <td class="table-info">{{x.admin_fname}} {{x.admin_lname}}</td>
+                    <td class="table-info">{{y}}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+                
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

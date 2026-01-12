@@ -1,0 +1,152 @@
+{% extends 'admin/base.html' %}
+
+{% block title %}
+Styleit|Login
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="container-fluid">
+        {% if spadmin %}
+        <div class='row'>
+            <div class="col-md-4 text-center mt-3 mb-3"></div>
+
+            <div class="col-md-4 text-center mt-3 mb-3">
+                {% with m = get_flashed_messages(with_categories=true) %}
+                    {% for c, i in m %}
+                        {% if c == 'success' %}
+                        <P class="alert alert-success fw-4">{{i}} </P>
+                        {% elif c == 'warning' %}
+                        <P class="alert alert-warning fw-4">{{i}} </P>
+                        {% else %}
+                        <P class="alert alert-danger fw-4">{{i}} </P>
+                        {% endif %}
+                    {% endfor %} 
+                {% endwith %}
+            <form action="{{url_for('adminsignup')}}" method="POST" enctype="multipart/form-data">
+                <div class='row'>
+                    <div class="col-md-12 bg-primary text-light m-2 p-2">
+                        <h5>Admin Signup</h5>
+                    </div>
+                </div>
+            <div class="row">
+                <div class="col-md-4">
+                    <input type="text" name="fname" placeholder="First Name" id="fname" class="form-control mt-3 mb-3" required>
+                </div>
+                <div class="col-md-4">
+                    <input type="text" name="lname" placeholder="Last Name" id="lname" class="form-control mt-3 mb-3" required>
+                </div>
+                <div class="col-md-4">
+                    <input type="text" name="secretword" placeholder="Secretword" id="secretword" class="form-control mt-3 mb-3" required>
+                </div>
+            </div>
+            <div class="row">
+                <div class="col-md-6">
+                    <input type="email" name="email" placeholder="jude65@gmail.com" id="email" class="form-control mt-3 mb-3" required>
+                </div>
+                <div class="col-md-6">
+                    <input type="text" name="phone" placeholder="Phone Number" id="phone" class="form-control mt-3 mb-3" required>
+                </div>
+            </div>
+            <div class="row">
+                <div class="col-md-6">
+                    <input type="password" name="pwd" placeholder="Password should be 8 character long" id="lname" class="form-control mt-3 mb-3" required>
+                </div>
+                <div class="col-md-6">
+                    <input type="password" name="cpwd" placeholder="Confirm Password" id="cpwd" class="form-control mt-3 mb-3" required>
+                </div>
+            </div>
+            <div class="row">
+                <div class="col-md-6">
+                    <input type="text" name="address" placeholder="Contact Address" id="address" class="form-control mt-3 mb-3" required>
+                </div>
+            
+                <div class="col-md-6">
+                    <input type="file" name="pic" id="pic" class="form-control mt-3 mb-3" required>
+                </div>
+            </div>
+            <div>
+                <input type="radio" name="gender" value="male" id="male" class="form-check-input mt-3 mb-3" required>
+                <label for="male" class="form-check-label me-2 mt-2 mb-3" required>Male</label>
+                <input type="radio" name="gender" value="female" id="female" class="form-check-input mt-3 mb-3" required>
+                <label for="female" class="form-check-label mt-2 mb-3" required>Female</label>
+            </div>
+            
+            <div>
+                <input type="checkbox" name="agree" id="agree1" class="form-check-input mt-3 mb-3" required>
+                <label for="agree" class="mt-2 mb-3" required>I agreed to the terms and conditions of website </label>
+            </div>
+           <div>
+               <button type="submit" id="btn1" class="btn btn-outline-danger mt-3 mb-3 form-control" disabled>Sign Up</button>
+               <input type="hidden" name="csrf_token" value="{{csrf_token()}}">
+            </div>
+            </form>
+            </div>
+
+            <div class="col-md-4 mt-3 mb-3">
+                {% for m in admi %}
+                <div class='row'>
+                    <div class="col-md-12">
+                        <form action="{{url_for('admin_deactivate')}}" method="POST">
+                        <span class="m-2 p-2">{{m.admin_fname}}</span> 
+                        <span class="m-2 p-2">{{m.admin_lname}}</span>
+                        <p class="m-2 p-2">{{m.admin_email}}</p>
+                        {#<p class="m-2 p-2">{{m.admin_pass}}</p>#} 
+                        <p class="m-2 p-2">{{m.admin_secretword}}</p>
+                        
+                            <input type="hidden" name="csrf_token" value="{{csrf_token()}}">
+                            <input type="hidden" name="admin_dact" value="{{m.admin_id}}">
+                            {% if m.admin_status=='active' %}
+                            <button type="submit" class="form-control mt-2 mb-2 bg-danger">Deactivate</button>
+                            {% else %}
+                            <button type="submit" class="form-control mt-2 mb-2 bg-danger">Activate</button>
+                            {% endif %}
+                        </form>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% else %}
+        <div class="row">
+            <div class="col-md-8 text-center mt-3 mb-3">
+                <img src="{{url_for('static', filename='images/customer.png')}}" class="img-fluid me-5" alt="customer pic" width="406"> 
+            </div>
+            
+            <div class="col-md-4 mt-3 mb-3">
+                <div class="row">
+                    <div class="col">
+                        {% with m = get_flashed_messages() %}
+                        {% for i in m %}
+                        <p class="fw-4">{{i}}</p>
+                        {% endfor %}
+                        {% endwith %}
+                        <form action="{{url_for('admin_login')}}" method="POST" class="generalface2">
+                            {{logini.csrf_token()}}
+                            <div>
+                                {{logini.email.label}}
+                                {% if logini.email.errors %}
+                                <span class='text-danger'>{{logini.email.errors}}</span>
+                                {% endif %}
+                                {{logini.email (class_="form-control mt-3 mb-3", placeholder="Ademolacode65@gmail.com")}}
+                            </div>
+                            <div>
+                                {{logini.pwd.label}}
+                                {% if logini.pwd.errors %}
+                                <span class='text-danger'>{{logini.pwd.errors}}</span>
+                                {% endif %}
+                                {{logini.pwd (class_="form-control mt-3 mb-3", placeholder="Password")}}
+                            </div>
+                            <div>
+                                {{logini.loginbtn (class_="form-control btn btn-outline-danger mt-3 mb-2", id="btn2")}}
+                            </div>
+                            <span class="me-3"><a href="{{url_for('adminforgottenpass')}}"> Forgotten Password?</a></span>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

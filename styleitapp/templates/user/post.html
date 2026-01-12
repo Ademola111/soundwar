@@ -1,0 +1,251 @@
+{% extends 'user/base.html' %}
+{% block title %}
+Styleit | Post details
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="container">
+        <div class="row">
+            <div class="col-md-3"></div>
+            <div class="col-md-6">
+                <div class="row">
+                    <div class="col-md-12 mt-3 mb-3">
+                        {% if pstn.post_suspend=="suspended" %}
+                        <div class="col mt-3 mb-3" id="divdisplay">
+                            <span class="p-3">
+                                <img src="/static/images/profile/designer/{{pstn.designerobj.desi_pic}}" width="50" alt="{{pstn.designerobj.desi_fname}}" class="img-rounded-circle"> 
+                                <b>{{pstn.post_title}}</b>
+                                <span style="font-size:10px;">Posted by: {{pstn.designerobj.desi_businessName}}</span>
+                                <span style="font-size:10px;">{{pstn.post_date.strftime('%d-%m-%Y %H:%M:%S')}}</span>
+                            </span>
+                            <p class="p-3">This post has been suspended</p>
+                        </div>
+                        {% elif pstn.post_delete=="deleted" %}
+                        <div class="col mt-3 mb-3" id="divdisplay">
+                            <p class="p-3">This post has been deleted by the user or unavailable</p>
+                        </div>
+                        {% else %}
+                        <div class="col mt-3 mb-3" id="divdisplay">
+                            {% if desiloggedin == des.desi_id %}
+                            <span id="trashi" class="me-2 ms-1"><i class="fa fa-ellipsis-v"></i></span>
+                            <span style="display:none; position:absolute; background-color: #ffffff;" id="3dot">
+                                <input type="hidden" name="potid" id="potid" value="{{pstn.post_id}}">
+                                <span id="trashit"><i class="fa fa-trash p-2"></i>Delete</span>
+                            </span>
+                            {% endif %}
+                            <span class="ps-3">
+                                <img src="/static/images/profile/designer/{{pstn.designerobj.desi_pic}}" width="50" alt="{{pstn.designerobj.desi_fname}}" class="img-rounded-circle"> 
+                                <b>{{pstn.post_title}}</b>
+                                <span style="font-size:10px;">Posted by: {{pstn.designerobj.desi_businessName}}</span>
+                                <span style="font-size:10px;">{{pstn.post_date.strftime('%d-%m-%Y %H:%M:%S')}}</span>
+                            </span>
+                            
+                            <p class="ps-3 text-justify">{{pstn.post_body}}</p>
+                            <div class="row">
+                                {% for x in pstn.imagepostobj %}
+                                {% if x.image_url %}
+                                <div class="col-md-3 m-3 p-3">
+                                    <img src="/static/images/postpic/{{x.image_url}}" alt="{{x.image_name}}" width="250" class="img img-fluid">
+                                </div> 
+                                {% else %}
+                                <div class="col-md-3" style="display:none ;">
+                                    
+                                </div>
+                                {% endif %}
+                                {% endfor %}
+                            </div>
+                            
+                            <div class="row">
+                                
+                                <div class="col-3 mt-3 mb-3 text-center">
+                                <!-- checking if designer has liked the post -->
+                                    {% if desiloggedin in pstn.likes|map(attribute='like_desiid')| list %}
+                                        <!-- checking the numbers of likes to know the singular/plural display -->
+                                        {% if i.like_postid == desiloggedin %}
+                                        <span style="color:rgb(235, 81, 107);">{{ pstn.likes| length }}</span> 
+                                        <a href="/like/{{pstn.post_id}}" style="color:rgb(235, 81, 107);"> <i class="fas fa-thumbs-up"></i> Liked</a>
+                                        {% else %}
+                                            {% if pstn.likes| length == 1 %}
+                                            <span style="color:rgb(235, 81, 107);">{{ pstn.likes| length }}</span> 
+                                            <a href="/like/{{pstn.post_id}}" style="color:rgb(235, 81, 107);"> <i class="fas fa-thumbs-up"></i> Like</a>
+                                            {% elif pstn.likes| length > 1 %}
+                                            <span style="color:rgb(235, 81, 107);">{{ pstn.likes| length }}</span> 
+                                            <a href="/like/{{pstn.post_id}}" style="color:rgb(235, 81, 107);"> <i class="fas fa-thumbs-up"></i> Likes</a>
+                                            {% endif %}
+                                        {% endif %}
+                                        <!-- end of singular /plural count check for designer -->
+                                <!-- checking if customer has liked the post -->
+                                    {% elif loggedin in pstn.likes|map(attribute='like_custid')| list %}
+                                        <!-- checking the numbers of likes to know the singular/plural display -->
+                                        {% if i.like_postid == loggedin %}
+                                        <span style="color:rgb(235, 81, 107);">{{ pstn.likes| length }}</span> 
+                                        <a href="/like/{{pstn.post_id}}" style="color:rgb(235, 81, 107);"> <i class="fas fa-thumbs-up"></i> Liked</a>
+                                        {% else %}
+                                            {% if pstn.likes| length == 1 %}
+                                            <span style="color:rgb(235, 81, 107);">{{ pstn.likes| length }}</span> 
+                                            <a href="/like/{{pstn.post_id}}" style="color:rgb(235, 81, 107);"> <i class="fas fa-thumbs-up"></i> Like</a>
+                                            {% elif pstn.likes| length > 1 %}
+                                            <span style="color:rgb(235, 81, 107);">{{ pstn.likes| length }}</span> 
+                                            <a href="/like/{{pstn.post_id}}" style="color:rgb(235, 81, 107);"> <i class="fas fa-thumbs-up"></i> Likes</a>
+                                            {% endif %}
+                                        {% endif %}
+                                        <!-- end of singular /plural count check for customer -->
+                                    <!-- checking if use has not like the post -->
+                                    {% else %}
+                                        {{pstn.likes| length}} <i class="far fa-thumbs-up"></i>
+                                        <a href="/like/{{pstn.post_id}}" style="color:rgb(0, 0, 0);"> Like</a>                                    
+                                    {% endif %}
+                                    <!-- end of like checks -->
+                                </div>
+                                
+                                <div class="col-5 mt-3 mb-3 text-center" id="commint">
+                                    {% if comnt|length == 1 %}
+                                    <span style="color:rgb(235, 81, 107);"><i class="fas fa-comment"></i> {{ comnt| length}} Comment</span>
+                                    {% elif comnt|length > 1 %}
+                                    <span style="color:rgb(235, 81, 107);"><i class="fas fa-comment"></i> {{ comnt| length}} Comments</span>
+                                    {% else %}
+                                    <span> <i class="fas fa-comment"></i> {{ comnt| length}} Comment</span>
+                                    {% endif %}
+                                </div>
+                                {#<div class="col-2 mt-3 mb-3 text-center">
+                                    <span style="color:rgb(235, 81, 107);"> <i class="fas fa-save"></i> Save</span>
+                                </div>#}
+                                <div class="col-4 mt-3 mb-3 text-center">
+                                    {% if desiloggedin %}
+                                        {% if share|length == 1 %}                                   
+                                        <span style="color:rgb(235, 81, 107); display:block;" id="share" onclick="share()"> {{share|length}} <i class="fas fa-share-alt"></i> Share</span>
+                                        {% elif share|length > 1 %}
+                                        <span style="color:rgb(235, 81, 107); display:block;" id="share" onclick="share()"> {{share|length}} <i class="fas fa-share-alt"></i> Shares</span>
+                                        {% else %}
+                                        <span style="color:rgb(235, 81, 107); display:block;" id="share" onclick="share()"> {{share|length}} <i class="fas fa-share-alt"></i> Share</span>
+                                        {% endif %}
+                                    
+                                    <div id="shareon" style="display:none;">
+                                        <div class="shareon d-flex overflow col-md-12">
+                                            <input type="hidden" id="user" value="{{desiloggedin}}">
+                                            <input type="hidden" id="sharepost" value="{{pstn.post_id}}">
+                                            <a class="facebook" id="facebook" value="facebook"></a>
+                                            <a class="linkedin" id="linkedin" value="linkedin"></a>
+                                            <a class="telegram" id="telegram" value="telegram"></a>
+                                            <a class="twitter" id="twitter" value="twitter"></a>
+                                            <a class="whatsapp" id="whatsapp" value="whatsapp"></a>
+                                        </div>
+                                    </div>
+                                    {% elif loggedin %}
+                                        {% if share|length == 1 %}                                   
+                                        <span style="color:rgb(235, 81, 107); display:block;" id="share" onclick="share()"> {{share|length}} <i class="fas fa-share-alt"></i> Share</span>
+                                        {% elif share|length > 1 %}
+                                        <span style="color:rgb(235, 81, 107); display:block;" id="share" onclick="share()"> {{share|length}} <i class="fas fa-share-alt"></i> Shares</span>
+                                        {% else %}
+                                        <span style="color:rgb(235, 81, 107); display:block;" id="share" onclick="share()"> {{share|length}} <i class="fas fa-share-alt"></i> Share</span>
+                                        {% endif %}
+                                
+                                    <div id="shareon" style="display:none;">
+                                        <div class="shareon d-flex overflow col-md-12">
+                                            <input type="hidden" id="user" value="{{loggedin}}">
+                                            <input type="hidden" id="sharepost" value="{{pstn.post_id}}">
+                                            <a class="facebook" id="facebook" value="facebook"></a>
+                                            <a class="linkedin" id="linkedin" value="linkedin"></a>
+                                            <a class="telegram" id="telegram" value="telegram"></a>
+                                            <a class="twitter" id="twitter" value="twitter"></a>
+                                            <a class="whatsapp" id="whatsapp" value="whatsapp"></a>
+                                        </div>
+                                    </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            <!-- comment form -->
+                            <div class="col-md-12 mb-2 p-3 send" id="commentform">
+                                <form action="{{url_for('comment', postid=pstn.post_id)}}" method="POST" id="form2">
+                                    <div style="display:flex; direction:row; justify-content:space-between;">
+                                        <textarea id="comment" name="comment" class="comment form-control" required="required"></textarea>
+                                        <input type="hidden" name="csrf_token" value="{{csrf_token()}}">
+                                        <button id="btn2" type="submit" class="btn fa fa-paper-plane"></button>
+                                    </div>
+                                </form>
+                            </div>                            
+                            <div class="col-md-12 p-2">
+                                <div class ='row'>
+                                    {% for y in comnt %}                                    
+                                    <div class="col-md-12 p-2" id="commint">
+                                        <!-- comment indentation starts here -->
+                                        {% if y.level() == 0 %}
+                                        <div class="col-md-12 border-start border-primary" style="background-color: rgb(255, 232, 240); border-radius: 10px;">   
+                                            {% elif y.level() == 1 %}
+                                            <div class="col-md-11 offset-md-1 border-start border-secondary" style="background-color: rgb(231, 231, 231); border-radius: 10px;">
+                                                {% elif y.level() == 2 %}
+                                                <div class="col-md-11 offset-md-1 border-start border-warning" style="background-color: rgb(236, 234, 234); border-radius: 10px;">
+                                                    {% elif y.level() == 3 %}
+                                                    <div class="col-md-11 offset-md-1 border-start border-dark" style="background-color: rgb(236, 234, 234); border-radius: 10px;">
+                                                        {% elif y.level() == 4 %}
+                                                        <div class="col-md-11 offset-md-1 border-start border-danger" style="background-color: rgb(236, 234, 234); border-radius: 10px;">
+                                                            {% else %}
+                                                            <div class="col-md-11 offset-md-1 border-start border-light" style="background-color: rgb(236, 234, 234); border-radius: 10px;">
+                                                                {% endif %}
+                                                                <!-- end of comment indentation -->
+                                                                <div>
+                                                                    <!-- display user pics and name -->
+                                                                    {% if y.comdesiobj %}
+                                                                    <span><img src="/static/images/profile/designer/{{y.comdesiobj.desi_pic}}" width="25" alt="{{y.comdesiobj.desi_fname}}" class="img-rounded-circle m-2"><a href="{{url_for('desi_detail', id=y.comdesiobj.desi_id)}}">{{y.comdesiobj.desi_fname}}</a></span>
+                                                                    {% elif y.comcustobj %}
+                                                                    <span><img src="/static/images/profile/customer/{{y.comcustobj.cust_pic}}" width="25" alt="{{y.comcustobj.cust_fname}}" class="img-rounded-circle m-2"><a href="{{url_for('custdetail', id=y.comcustobj.cust_id)}}">{{y.comcustobj.cust_fname}} </a></span>
+                                                                    {% endif %}
+                                                                    <span style="font-size:10px;">{{y.com_date.strftime('%d-%m-%Y %H:%M:%S')}}</span><br> 
+                                                                    <!-- suspension condition -->
+                                                                    {% if y.com_suspend=='suspended' %}
+                                                                    <span class="text-justify" style="padding:20px;"><i> This comment has been flagged </i></span>
+                                                                    <!-- delete condition -->
+                                                                    {% elif y.com_delete=='deleted' %}
+                                                                    <span class="text-justify" style="padding:20px;"><i> This comment has been deleted </i></span>
+                                                                    {% else %} 
+                                                                    <!-- main reply body -->
+                                                                    <span class="text-justify me-2" style="padding:20px;" onclick="reply('{{y.com_id}}')"> 
+                                                                        {% if y.level() != 0 %} <i class=" fa-solid fa-reply"></i>
+                                                                        {% else %}
+                                                                        {% endif %} 
+                                                                        {{y.com_body}} 
+                                                                    </span>
+                                                                    {% endif %}
+                                                                    <!-- see more comment and replies -->
+                                                                    {#{% if y.path|length > 3 %}
+                                                                    <span>see more replies</span>
+                                                                    {% endif %}#}
+                                                                </div>
+                                                                <!-- reply form  -->
+                                                                    <div class="mb-2 p-3 send" id="{{y.com_id}}" style="display:none;" >
+                                                                        <form action="{{url_for('reply',postid=pstn.post_id,commentid=y.com_id) }}" method="POST" id="form1">
+                                                                            <div style="display:flex; direction:row; justify-content:space-between;">
+                                                                                <textarea id="comrep" name="comrep" class="comment form-control" required="required"></textarea>
+                                                                                <input type="hidden" id="csrf" name="csrf_token" value="{{csrf_token()}}">
+                                                                                <button type="submit" id="replybtn" class="btn fa fa-paper-plane"></button>
+                                                                            </div>
+                                                                        </form>
+                                                                    </div> 
+                                                                <!-- end of form, comment and reply display -->
+                                                            </div>
+                                                        </div>
+                                                        
+                                                        {% endfor %}
+                                                    </div>
+                                                </div>   
+                                            </div>
+                                        </div>
+                                    </div> 
+                                                                
+                                </div>
+                            </div>
+                                
+                            </div>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

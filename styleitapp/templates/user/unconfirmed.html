@@ -1,0 +1,31 @@
+{% extends 'user/base.html' %}
+
+{% block title %}
+Styleit | Unconfirmed
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-md-12">
+            <span>{% with m = get_flashed_messages(with_categories=true) %}
+                {% for c, i in m %}
+                    {% if c == 'success' %}
+                    <P class="alert alert-success fw-4">{{i}} </P>
+                    {% elif c == 'warning' %}
+                    <P class="alert alert-warning fw-4">{{i}} </P>
+                    {% else %}
+                    <P class="alert alert-danger fw-4">{{i}} </P>
+                    {% endif %}
+                {% endfor %} 
+            {% endwith %}</span>
+        </div>
+        <div class="col-md-12 mt-3 mb-3">
+            <h1>Welcome!</h1>
+            {{desiloggedin}} and {{loggedin}}
+            <p>You have not confirmed your account. Please check your inbox (amd your spam folder) - you should have received an email with a confirmation link.</p>
+            <p>Didn't get an email? <a href="{{url_for('resent_confirmation')}}" class="btn btn-dark" target="_self">Resend Activation Code</a>.</p>
+        </div>
+    </div>
+</div>
+{% endblock %}

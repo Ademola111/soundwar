@@ -1,0 +1,120 @@
+{% extends 'user/base.html' %}
+
+{% block title %}
+Styleit | Home
+{% endblock %}
+
+{% block content %}
+<!-- search box start -->
+<div class="container" id="cont">
+    <div class="row">
+        <div class="offset-md-2 col-md-8 offset-md-2 mt-5 mb-3" id="searchdiv">
+        <h4 class="text-center mt-4"></h4>
+        <form class="d-flex text-center" id="search" method="POST" action="{{url_for('desisearch')}}">
+			<input type="hidden" name="csrf_token" value="{{csrf_token()}}">
+            <input class="form-control me-2" type="search" name="search" placeholder="Looking for professional fashionista? Search with 'name' or 'location' " aria-label="Search" required="required">
+            <button class="btn btn-outline-danger" type="submit">Search</button>
+        </form>
+        </div>
+    </div>
+   <!-- search box ended -->
+   <!-- Designer registration start -->
+   <div class="row">
+	   <div class="col-md-6" id="indexpixdisplay">
+		   <div class="row">
+			   <div class="col-md-4"></div>
+			   <div class="col-md-8">
+					<div class="row">
+						<div class="col-md-6">
+								<img src="{{url_for('static', filename='images/macro.jpg')}}" alt="macro" class="img-fluid me-2 mt-3" width="200">
+								
+								<img src="{{url_for('static', filename='images/bilalh.jpg')}}" alt="bilalh" class="img-fluid mt-3 mb-3 text-end" width="200">
+						</div>
+						<div class="col-md-6">
+								<img src="{{url_for('static', filename='images/tailor.jpg')}}" alt="tailor" class="img-fluid me-2 mt-3 mb-3" width="200">
+								<img src="{{url_for('static', filename='images/marilia.jpg')}}" alt="marilia" class="img-fluid mt-3 mb-3 text-end" width="200">
+						</div>
+					</div>
+			   </div>
+		   </div>
+	   </div>
+
+	   <div class="col-md-6 mt-5" id="indexdesignerformdiv2">
+			<div class="row">
+				<div class="col-md-7" id="indexinnderdesignerformdiv2">
+					<p id="indexdesignerhead" class="mt-3">Creator's Benefits</p><hr>
+					<h2 id="indexdesignertitle">What You Get As a Creator</h2>
+					<span id="features1">Features you will get if you register as a creator</span><br>
+					<ul class="mt-3" id="indexfeaturelist">
+						<li>Direct contact with clients</li>
+						<li>Product showcase on trending</li>
+						<li>Secure payment mode</li>
+					</ul><hr>
+					<div class="text-center mb-4 mt-3">
+						<span id="indexgetstarted"><a href="{{url_for('designerSignup')}}"> Get Started <i class="fa fa-arrow-right"></i></a></span>
+					</div>
+				</div>
+				<div class="col-md-5">
+				</div>
+			</div>
+	   </div>
+   </div>
+   <!-- designer registration ends -->
+      <!-- Customer registration start -->
+	  <div class="row">
+		 
+		<div class="col-md-6 mt-5 mb-5" id="indexdesignerformdiv21">
+			<div class="row">
+				<div class="col-md-5">
+
+				</div>
+				<div class="col-md-7" id="indexinnderdesignerformdiv21">
+					 <p id="indexdesignerhead1" class="mt-3">Client's Benefits</p><hr>
+					 <h2 id="indexdesignertitle1">What You Get As a Client</h2>
+					 <span id="features2">Features you will get if you register as a Client</span><br>
+					 <ul class="mt-3" id="indexfeaturelist1">
+						 <li>Direct contact with creators</li>
+						 <li>Get the best professional for your next outfits</li>
+						 <li>Book a creator</li>
+						 <li>Prompt and secure service delivery</li>
+					 </ul><hr>
+					 <div class="text-center mb-4 mt-3">
+						 <span id="indexgetstarted1"><a href="{{url_for('customerSignup')}}"> Get Started <i class="fa fa-arrow-right"></i></a></span>
+					 </div>
+				</div>
+			</div>
+		</div>
+
+		<div class="col-md-6" id="indexpixdisplay">
+			<div class="row">
+				
+				<div class="col-md-8">
+					 <div class="row">
+						 <div class="col-md-6">
+								 <img src="{{url_for('static', filename='images/ankara.jpg')}}" alt="macro" class="img-fluid me-2 mt-3" width="200">
+								 
+								 <img src="{{url_for('static', filename='images/fashion.jpg')}}" alt="bilalh" class="img-fluid mt-3 mb-3 text-end" width="200">
+						 </div>
+						 <div class="col-md-6">
+								 <img src="{{url_for('static', filename='images/smile.jpg')}}" alt="tailor" class="img-fluid me-2 mt-3 mb-3" width="200">
+								 <img src="{{url_for('static', filename='images/ankara2.jpg')}}" alt="marilia" class="img-fluid mt-3 mb-3 text-end" width="200">
+						 </div>
+					 </div>
+				</div>
+				<div class="col-md-4"></div>
+			</div>
+		</div>
+	</div>
+	<!-- customer registration ends -->
+</div>
+
+<!-- our clients -->
+<div class="container-fluid">
+    <div class="row">
+		<div class="row mt-3 mb-3">
+			
+		</div>
+	</div>
+</div>
+<!-- clients ends -->
+{% endblock %}

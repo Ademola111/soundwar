@@ -1,0 +1,39 @@
+{% extends 'admin/base.html' %}
+
+{% block title %}
+Styleit | Mailling List
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="col-md-12">
+        <span>{% with m = get_flashed_messages(with_categories=true) %}
+            {% for c, i in m %}
+                {% if c == 'success' %}
+                <P class="alert alert-success fw-4">{{i}} </P>
+                {% elif c == 'warning' %}
+                <P class="alert alert-warning fw-4">{{i}} </P>
+                {% else %}
+                <P class="alert alert-danger fw-4">{{i}} </P>
+                {% endif %}
+            {% endfor %} 
+        {% endwith %}</span>
+    </div>
+    <div class="row">
+        <div class="col-md-4"></div>
+        <div class="col-md-4">
+            <h5>Mailing List</h5>
+            <div class="col-md-12 mt-3 mb-3">
+                <form action="{{url_for('admin_general_mail')}}" method="post">
+                    <input type="hidden" name="csrf_token" value="{{csrf_token()}}">
+                    <input type="text" name="subject" class="form-control mt-2" placeholder="enter the subject"><br>
+                    <textarea name="body" class="form-control mt-2"></textarea>
+                    <button type="submit" class="form-control mt-2">Send Message</button>
+                    
+                </form>
+            </div>
+        </div>
+        <div class="col-md-4"></div>
+    </div>
+</div>
+{% endblock %}

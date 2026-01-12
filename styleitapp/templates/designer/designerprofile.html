@@ -1,0 +1,385 @@
+{% extends 'user/base.html' %}
+{% block title %}
+Styleit|Profile
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <span>{% with m = get_flashed_messages(with_categories=true) %}
+            {% for c, i in m %}
+                {% if c == 'success' %}
+                <P class="alert alert-success fw-4">{{i}} </P>
+                {% elif c == 'warning' %}
+                <P class="alert alert-warning fw-4">{{i}} </P>
+                {% else %}
+                <P class="alert alert-danger fw-4">{{i}} </P>
+                {% endif %}
+            {% endfor %} 
+        {% endwith %}</span>
+        <div class="col-md-1" id="tog">
+            <span id="profiletoggler" data-bs-toggle="collapse" data-bs-target="#profilewhole" class="toggler-icon" aria-expanded="false" ><img src="/static/images/profile/designer/{{des.desi_pic}}" alt="{{des.desi_fname}}" width="50px" class="img rounded-circle p-1"></span>
+        </div>
+        
+        <div class="col-md-3 text-center" id="profile" onclick="divchange()">
+            <span id="pro"><i class="fas fa-user me-2"></i> Profile</span>
+        </div>
+        <div class="col-md-4 text-center" id="Liked" onclick="divchange2()">
+            <span id="Lik" class="mt-3 mb-3"><i class="fas fa-pen me-2"></i> Post</span>
+        </div>
+        <div class="col-md-4 text-center" id="Unliked" onclick="divchange3()">
+            <span id="Unlik" class="mt-3 mb-3"><i class="fas fa-clipboard me-2"></i> Booking</span>
+        </div>
+        
+    </div>
+        <div class="row">
+            <div class="col-md-3 collapse" id="profilewhole">
+                <div class="row" id="prorow">
+                    <div class="col-md-3 mb-2 mt-2" >
+                        <img src="/static/images/profile/designer/{{des.desi_pic}}" alt="{{des.desi_fname}}" width="70px" class="p-1" id="profilediv">
+                    </div>
+                    <div class="col-md-9 mt-2 mb-2 generalface2">
+                        <h5 class="col-md-12 m-2 p-2 text-center" id="profilename">{{des.desi_businessName}} </h5>
+                        {% if follow|length > 1 %}
+                        <p class="text-center"><span class="mt-2 mb-2 text-light">{{ follow|length }} Followers</span></p>
+                        {% else %}
+                        <p class="text-center"><span class="mt-2 mb-2 text-light">{{ follow|length }} Follower</span></p>
+                        {% endif %}
+
+                        {% if des.desi_status=='actived': %}
+                        <span id="online" class="col-md-12 m-2 p-2"><i class="fa fa-user-alt m-2"></i> <i>Online</i></span>
+                        {% else %}
+                        <span id="online2" class="col-md-12 m-2 p-2"><i class="fa fa-user-alt m-2"></i> <i>Offline</i></span>
+                        {% endif %}
+                        <span id="logout"><a href="{{url_for('designerlogout')}}"><i class="fa fa-sign-out m-2"></i> Logout</a></span>
+                    </div>
+
+                    <div class="col-md-12" id="profilebottom">
+                        <span id="settings" class="generalface2"><a href="#"><i class="fa fa-cog m-2"></i> Settings</a></span>
+                        <span id="edit" onclick="divchange4()" class="generalface2"><a href="#"><i class="fas fa-user-edit m-2"></i> Edit</a></span>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-md-12 mt-3 mb-3">
+                        {% if subt.sub_status == 'active' %}
+                        <p class="mt-3 mb-3 generalface2"><a href="{{url_for('posting')}}"><span class="m-1 p-1" id="createpost"><i class="fas fa-pen m-2"></i> Create a Post</span></a></p>
+                        <p class="mt-3 mb-3 generalface2"><a href="{{url_for('subplan')}}"><span class="m-1 p-1" id="subscription"><i class="fas fa-credit-card m-2"></i> Subscription</span></a></p>
+                        {% else %}
+                        <p><span style="color:rgb(255, 255, 255); margin:2px; font-size:10px;">Subcription Expired. Subcribe to remain visible to your customers</span></p>
+                        <p class="mt-3 mb-3 generalface2"><a href="{{url_for('subplan')}}"><span class="m-1 p-1" id="subscription"><i class="fas fa-credit-card m-2"></i> Subscription</span></a></p>
+                        
+                        {% endif %}
+                        <p class="mt-3 mb-3 generalface2" onclick="divchange5()"><span id="tasks" class="m-1 p-1"><i class="fa fa-tasks m-2"></i> Task History</span></p>
+                    </div>
+                </div>
+                <div class="row">
+                    {% if bnk.bnk_desiid==desiloggedin %}
+                    <div class="col-md-12 generalface2">
+                    <span class="text-light mt-3 mb-3">Bank Detail</span>
+                    <p class="text-light mb-2"><span>Account Name:</span><span> {{bnk.bnk_acname}}</span></p>
+                    <p class="text-light mb-2"><span>Account Number:</span><span> {{bnk.bnk_acno}}</span></p>
+                    <p class="text-light mb-2"><span>Bank Name:</span><span> {{bnk.bnk_bankname}}</span></p>
+
+                    </div>
+                    {% else %}
+                    <div class="col-md-12 generalface2">
+                    <span class="text-light mt-3 mb-3">Add Bank Detail</span>
+                        <form action="{{url_for('bank_detail')}}" method="POST">
+                            <input type="hidden" class="form-control mt-3 mb-3" name="csrf_token" value="{{ csrf_token() }}">
+                            <input type="text" class="form-control mt-3 mb-3" name="name" placeholder="Account Name same as bank">
+                            <select class="form-control mt-3 mb-3" name="bank">
+                                <option>Select your bank</option>
+                                {% for bn in bnkcode %}
+                                <option value="{{bn.name}}">{{bn.name}}</option>
+                                {% endfor %}
+                            </select>
+                            <input type="text" id="acno" maxlength="10" class="form-control mt-3 mb-3" name="acno" placeholder="Account Number" onkeydown="return event.keyCode >= 48 && event.keyCode <= 57 || event.keyCode === 8 || event.keyCode === 46">
+                            <button type="submit" class="form-control btn btn-danger mt-3 mb-3">Add Detail</button>
+                        </form>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+            <div  id="divbody">
+                <div class="row">
+                    <div class="col-md-12 mt-3 mb-3 generalface2" id="Sameprofile" style="display:none">
+                            <div class="row">
+                                <div class="col-md-12">
+                                    <img src="/static/images/profile/designer/{{des.desi_pic}}" alt="{{des.desi_fname}}" width="100px" class=" img img-fluid p-1">
+                                </div>
+                            </div>
+                            <div class="row">
+                                <div class="col-md-4 mt-3 mb-3">
+                                    <label><b>First Name:</b></label>
+                                    <p>{{des.desi_fname}}</p>
+                                </div>
+                                <div class="col-md-4 mt-3 mb-3">
+                                    <label><b>Last Name:</b></label>
+                                    <p>{{des.desi_lname}}</p>
+                                </div>
+                                <div class="col-md-4 mt-3 mb-3">
+                                    <label><b>Gender:</b></label>
+                                    <p>{{des.desi_gender}}</p>
+                                </div>
+                            </div>
+                            <div class="row">
+                                <div class="col-md-4 mt-3 mb-3">
+                                    <label><b>Email:</b></label>
+                                    <p>{{des.desi_email}}</p>
+                                </div>
+                                <div class="col-md-4 mt-3 mb-3">
+                                    <label><b>Mobile No:</b></label>
+                                    <p>{{des.desi_phone}}</p>
+                                </div>
+                                <div class="col-md-4 mt-3 mb-3">
+                                    <label><b>State:</b></label>
+                                    {% if des.stateobj2 %}
+                                    <p>{{des.stateobj2.state_name}}</p>
+                                    {% else %}
+                                    <p>{{des.desi_state}}</p>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            <div class="row">
+                                <div class="col-md-4 mt-3 mb-3">
+                                    {% if des.lgaobj2 %}
+                                    <label><b>L.G.A:</b></label>                                    
+                                    <p>{{des.lgaobj2.lga_name}}</p>
+                                    {% else %}
+                                    <label><b>City:</b></label>                                    
+                                    <p>{{des.desi_city}}</p>
+                                    {% endif %}
+                                </div>
+                                <div class="col-md-4 mt-3 mb-3">
+                                    <label><b>Contact Address:</b></label>
+                                    <p>{{des.desi_address}}</p>
+                                </div>
+                                <div class="col-md-4 mt-3 mb-3">
+                                    <label><b>Country:</b></label>
+                                    <p>{{des.desicountry.country_name}}</p>
+                                </div>
+                            </div>
+                            
+                    </div>
+                    <div class="col-md-12 mt-3 mb-3 generalface2" id="Samelike" style="display:none">
+                        <div class="row">
+                           {% if pos %}
+                                {% for pst in pos.items: %}
+                                <div class="col-md-2">
+                                    <span class="card" style="background-color:transparent;">
+                                       <a href="/post/{{pst.post_id}}">
+                                            {% if pst.imagepostobj[0] %}
+                                            <span class="col-md-2">
+                                                <img src="/static/images/postpic/{{pst.imagepostobj[0].image_url}}" alt="{{pst.imagepostobj.image_name}}" class="img img-fluid" style="height: 150px !important; width:fit-content">
+                                            </span>
+                                            {% else %}
+                                            <span class="col-md-2">
+                                                Add atleast one image to make your post go live on trending
+                                            </span>
+                                            {% endif %}                                            
+                                        </a>
+                                    </span>
+                                    <p class="text-center" style="background-color: rgb(231, 80, 168); padding: 4px; border-bottom-right-radius: 5px; border-bottom-left-radius: 5px;">   
+                                    <a href="/post/{{pst.post_id}}" ><span >{{pst.post_title}}</span></a></p>
+                                    
+                                    
+                                </div>                                
+                                {% endfor %}
+                                <p class="text-center"><a href="{{url_for('postlist')}}">Load more</a></p>
+                                <!-- pagination links -->
+                            
+                            <!-- end pagination -->
+                            {% else %}
+                            <span>You have no post. Click Create Post to begin </span>
+                            {% endif %}
+                        </div>                        
+                    </div>
+
+                    <div class="col-md-12 mt-3 mb-3 generalface2" id="Sameunlike" style="display:none">                       
+                        <div class="row">
+                            
+                            <div class="col-md-12 text-center">
+                                <h4>Appointment List</h4>
+                            </div>
+                            <div id="appt" class="row">
+                            {% if getbk %}
+                                {% for bk in getbk.items %}
+                                    <div class="col-md-3">
+                                        <!-- Button trigger modal -->
+                                        <span class="card mt-2 mb-2 p-3">
+                                            <p><span ><strong>Name:</strong></span>
+                                            <a href="{{url_for('custdetail', id=bk.custbaobj.cust_id)}}"><span>{{bk.custbaobj.cust_fname}} {{bk.custbaobj.cust_lname}}</span></a></p>
+                                            {% if bk.ba_status == 'accept' %}
+                                            <p><span><strong>Contact</strong></span> <span>{{bk.custbaobj.cust_phone}}</span></p>
+                                            {% endif %}
+                                            <p><span><strong>Booking Date:</strong></span> <span>{{bk.ba_bookingDate}}</span></p>
+                                            <p><span><strong>Booking Time:</strong></span> <span>{{bk.ba_bookingTime}}</span></p>
+                                            <p><span><strong>Collection Date:</strong></span> <span>{{bk.ba_collectionDate}}</span></p>
+                                            <p><span><strong>Collection Time:</strong></span> <span>{{bk.ba_collectionTime}}</span></p>
+                                            <p><span><strong>Country:</strong></span> <span>{{bk.custbaobj.custcountry.country_name}}</span></p>
+                                            
+                                            
+                                            <div class="row">
+                                                <div class="d-flex">
+                                                <form action="/appointment/status/{{bk.ba_id}}/" method="POST">
+                                                    <input type="hidden" name="csrf_token" value="{{csrf_token()}}">
+                                                    <input type="hidden" name="action" value="accept" readonly>
+                                                    <div class="col-6 text-start">
+                                                        {% if bk.ba_status == 'accept' or bk.ba_status=='completed' %}
+                                                        <span class="m-2 p-2 btn btn-success">Accepted</span>
+                                                        {% else %}
+                                                            {% if bk.ba_status == 'decline' or bk.ba_status=='not done' %}
+                                                            <button type="submit" class="m-2 p-2 btn btn-success" id="accept" disabled>Accept</button>
+                                                            {% else %}
+                                                            <button type="submit" class="m-2 p-2 btn btn-success" id="accept">Accept</button>
+                                                            {% endif %}
+                                                        {% endif %}
+                                                    </div>
+                                                </form>
+                                                {#<form action="/appointment/status/{{bk.ba_id}}/" method="POST">
+                                                    <input type="hidden" name="csrf_token" value="{{csrf_token()}}">
+                                                    <input type="hidden" name="action" value="decline" readonly>#}
+                                                    <div class="col-6 text-end">
+                                                        {% if bk.ba_status == 'decline' or bk.ba_status=='not done' %}
+                                                        <span class="m-2 p-2 btn btn-danger">Declined</span>
+                                                        {% else %}
+                                                            {% if bk.ba_status == 'accept' or bk.ba_status=='completed' %}
+                                                            <button type="submit" class="m-2 p-2 btn btn-danger" id="decline" disabled>Decline</button>
+                                                            {% else %}
+                                                            <button type="button" class="m-2 p-2 btn btn-danger" id="decline" data-bs-toggle="modal" data-bs-target="#exampleModal">Decline</button>
+                                                            {% endif %}
+                                                        {% endif %}
+                                                    </div>
+                                                {#</form>#}
+                                                <!-- modal for decline -->
+
+                                                <!-- Modal -->
+                                                <div class="modal fade" id="exampleModal" tabindex="-1" aria-labelledby="exampleModalLabel" aria-hidden="true">
+                                                    <div class="modal-dialog">
+                                                    <div class="modal-content">
+                                                        <div class="modal-header">
+                                                        <h1 class="modal-title fs-5" id="exampleModalLabel">Reason for Decline</h1>
+                                                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                                        </div>
+                                                        <div class="modal-body">
+                                                        <form action="/appointment/status/{{bk.ba_id}}/" method="POST">
+                                                            <input type="hidden" name="csrf_token" value="{{csrf_token()}}">
+                                                            <input type="hidden" name="action" value="decline" readonly>
+                                                            <label for="response">Specify your reason for decline and time of availability</label><br><span style="font-size: 10px; color:grey">E.g. Hi Buddy, I am booked for the month. Kindly book ahead if not urgent. </span>
+                                                            <textarea name="response" id="response" class="form-control" required="required"></textarea>
+                                                        
+                                                        </div>
+                                                        <div class="modal-footer">
+                                                        <button type="submit" class="m-2 p-2 btn btn-danger" id="decline">Decline</button>
+                                                        </div>
+                                                        </form>
+                                                    </div>
+                                                    </div>
+                                                </div>
+                                                <!-- end of modal -->
+                                                </div>
+                                                {% if bk.ba_status == 'accept' %}
+                                                <div class="col-md-12">
+                                                    <span class="m-2 p-2 text-primary btn"><a href="{{url_for('complete_task', id=bk.ba_id)}}"> Confirm Work Completion</a></span>
+                                                </div>
+                                                {% elif bk.ba_status =='completed' or bk.ba_status =='collected'%}
+                                                <div class="col-md-12">
+                                                    <span class="m-2 p-2 text-primary btn">This job have been delivered </span>
+                                                </div>
+                                                {% endif %}
+                                            </div>
+                                            
+                                        </span>
+                                                                    
+                                    </div>
+                                {% endfor %}
+                                <p class="text-center mt-3 mb-3"><a href="{{url_for('bkappoint_list')}}">Load more</a></p>   
+                            {% else %}
+                            <p>You haven't complete a task </p>
+                            {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-12 mt-3 mb-3 generalface2" id="editprofile" style="display:none">
+                        <h3>Edit Profile</h3>
+                        
+                            <form action="{{url_for('designerProfile')}}" method="POST">
+                                <div class="row">
+                                    <div class="col-md-6 mt-3 mb-3">
+                                        <label><b>First Name:</b></label>
+                                        <input type="text" name="fname" value="{{des.desi_fname}}" class="form-control" >
+                                    </div>
+                                    <div class="col-md-6 mt-3 mb-3">
+                                        <label><b>Last Name:</b></label>
+                                        <input type="text" name="lname" value="{{des.desi_lname}}" class="form-control" >
+                                    </div>
+                                </div>
+                                <div class="row">
+                                    <div class="col-md-6 mt-3 mb-3">
+                                        <label><b>Email:</b></label>
+                                        <input type="email" name="email" value="{{des.desi_email}}" class="form-control" >
+                                    </div>
+                                    <div class="col-md-6 mt-3 mb-3">
+                                        <label><b>Mobile No:</b></label>
+                                        <input type="text" name="phone" value="{{des.desi_phone}}" class="form-control" >
+                                    </div>
+                                </div>
+                                <div class="row">
+                                    <div class="col-md-6 mt-3 mb-3">
+                                        <label><b>Contact Address:</b></label>
+                                        <input type="text" name="address" value="{{des.desi_address}}" class="form-control" >
+                                    </div>
+                                </div>
+                                    <input type="hidden" name="csrf_token" value="{{csrf_token()}}">
+                                <div class="col-md-12">
+                                    <button type='submit' class="form-control mt-3 mb-3 btn btn-secondary">Update</button>
+                                </div>
+                            </form>
+                        
+                    </div>
+                    <div class="col-md-12 mt-3 mb-3 generalface2" id="task" style="display:none">
+                        <div class="row">
+                           {% if bk %}
+                                {% for pt in bk.items: %}
+                                <div class="col-md-2">
+                                    <div class="row">
+                                        <div class="col-md-12">
+                                            <span class="card text-center" style="background-color:transparent;">
+                                                {% if pt.jb_pic %}
+                                                    <div class="col-md-12">
+                                                        <span class="col-md-2">
+                                                            <img src="/static/images/completed_task/{{pt.jb_pic}}" alt="{{pt.jb_id}}" class="img img-fluid" style="height: 150px !important; width:fit-content">
+                                                        </span>
+                                                    </div>
+                                            </span>        
+                                                    <div class="col-md-12 text-center" style="background-color: rgb(231, 80, 168); padding: 4px; border-bottom-right-radius: 5px; border-bottom-left-radius: 5px;">
+                                                        <span class="text-left" style="font-size:12px;">{{pt.jbcustobj.cust_fname}} {{pt.jbcustobj.cust_lname}}</span>
+                                                        <span class="d-flex justify-content-between mt-2">
+                                                        <span class="text-left" style="font-size:6px; margin: 2px; padding: 2px; border-radius: 5px; color:#000000">{{pt.jb_date}}</span>
+                                                        <span class="text-left" style="font-size:8px; background-color: rgb(245, 238, 239); margin: 2px; padding: 2px; border-radius: 5px; color:#000000">{{pt.jb_status | title}}</span>
+                                                        </span>
+                                                    </div>
+                                                {% else %}
+                                                    <span class="col-md-2">
+                                                        Add atleast one image to make your post go live on trending
+                                                    </span>
+                                                {% endif %} 
+                                            </div>
+                                    </div>
+                                </div>                                
+                                {% endfor %}
+                                <p class="text-center mt-3 mb-3"><a href="{{url_for('jobdone')}}">Load more</a></p>
+                            {% else %}
+                            <span> You have no job completed. </span>
+                            {% endif %}
+                        </div>
+                        
+                    </div>
+                </div>
+            </div>
+        </div>
+</div>
+
+
+
+{% endblock %}

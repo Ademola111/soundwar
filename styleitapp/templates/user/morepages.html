@@ -1,0 +1,187 @@
+{% extends 'user/base.html' %}
+
+{% block content %}
+{% if getbk %}
+<div class="container-fluid">
+    <div class="row">
+        {% for bk in getbk.items %}
+        <div class="col-md-3">                           
+            <span class="card m-2 p-2">
+                <p><span>Your appointment with <strong> {{bk.desibaobj.desi_businessName}} </strong>
+                {% if bk.ba_status == 'accept' or bk.ba_status == 'completed'%}
+                    was <strong> accepted. </strong>You can reach out at <strong> {{bk.desibaobj.desi_phone}} </strong> to makeup decisions.
+                {% elif bk.ba_status == 'decline' %}
+                    was <strong> declined. </strong><br> Reason: <br> {{bk.ba_reason}} <br> Click <a href="{{url_for('designers')}}" class="text-primary">Designers</a> to view list of designers and book here <a href="{{url_for('book_appointment')}}" class="text-primary">Book Appointment</a>
+                {% else %}
+                    still <strong>{{bk.ba_status}}.</strong> Kindly book another if urgent. Click <a href="{{url_for('book_appointment')}}" class="text-primary">Book Appointment</a> to book now.
+                {% endif %}
+                </span></p>
+                <p><span><strong>Booking Date:</strong></span> <span style="font-size: 12px;">{{bk.ba_bookingDate}}</span></p>
+                <p><span><strong>Booking Time:</strong></span> <span style="font-size: 12px;">{{bk.ba_bookingTime}}</span></p>
+                <p><span><strong>Collection Date:</strong></span> <span style="font-size: 12px;">{{bk.ba_collectionDate}}</span></p>
+                <p><span><strong>Collection Time:</strong></span> <span style="font-size: 12px;">{{bk.ba_collectionTime}}</span></p>
+
+                {% if bk.ba_status == 'accept' and bk.ba_paystatus=='pending' %}
+                    <div class="col-md-12">
+                        <p style="background-color: rgb(219, 8, 8); padding: 2px; color:#fff; margin: 2px; text-align: center;">If negotiation is sealed, kindly make payment below</p>
+                        <span class="m-2 p-2 btn btn-danger"><a href="{{url_for('custpayment', id=bk.ba_id)}}" style="color:white"> Make Payment</a></span>
+                    </div>
+                {% elif bk.ba_status == 'accept' and bk.ba_paystatus=='paid' %}
+                    <div class="col-md-12">
+                        <span class="m-2 p-2 text-primary btn">Payment completed </span>
+                    </div>
+                {% elif bk.ba_status == 'completed' and bk.ba_custstatus =='not collected' %}
+                    <div class="col-md-12">
+                        <span class="m-2 p-2 btn btn-danger"><a href="{{url_for('confirm_delivery', id=bk.ba_id)}}" style="color:white"> Confirm Delivery</a></span>
+                    </div>
+
+                {% elif bk.ba_custstatus =='collected' and bk.ba_status == 'completed' and bk.ba_paystatus=='pending' or bk.ba_paystatus=='failed' %}
+                    <div class="col-md-12">
+                        <p>Your payment is either pending or failed</p>
+                        <span class="m-2 p-2 text-primary btn"><a href="{{url_for('custpayment', id=bk.ba_id)}}">Try again</a></span>
+                    </div>
+                {% elif bk.ba_custstatus =='collected' and bk.ba_status == 'completed' and bk.ba_paystatus=='paid' %}
+                    <div class="col-md-12">
+                        <span class="m-2 p-2 text-primary btn">Task completed </span>
+                    </div>
+                
+                {% endif %}
+            </span>                               
+        </div>
+        {% endfor %}
+    </div>
+    
+    <div class="text-center mt-3">
+        <a href="{{url_for('appoint', page=getbk.prev_num)}}" class="btn btn-outline-primary {% if getbk.page ==  1 %} disabled {% endif %}">&laquo;</a>
+        <!-- looping through the number of pages to display a link for each -->
+        {% for page_num in getbk.iter_pages(left_edge=1, right_edge=1, left_current=1, right_current=1) %}
+
+        {% if page_num %}
+        <!-- check for active page and set the link to active -->
+            {% if getbk.page == page_num %}
+            <a href="{{url_for('appoint', page=page_num)}}" class="btn btn-outline-dark">{{page_num}}</a>
+            {% else %}
+            <a href="{{url_for('appoint', page=page_num)}}" class="btn btn-outline-dark">{{page_num}}</a>
+            {% endif %}
+        {% else %}
+        ...
+        {% endif %}
+        {% endfor %}
+        <a href="{{url_for('appoint', page=getbk.next_num)}}" class="btn btn-outline-primary {% if getbk.page ==  getbk.pages %} disabled {% endif %}">&raquo;</a>
+        <p class="text-right mt-3">Showing Page {{getbk.page}} of {{getbk.pages}}</p>
+        <p><a href="{{url_for('customerProfile')}}">Back to Profile</a></p>
+    </div>
+</div>
+{% elif mylike %}
+<div class="container-fluid">
+    <div class="row">
+        {% if mylike %}
+            {% for like in mylike.items %}
+            <div class="col-md-2 m-2" style="background-color: rgb(231, 80, 168); padding: 4px; border-bottom-right-radius: 5px; border-bottom-left-radius: 5px; ">    
+            <div>
+                {#<span style="font-size: 10px; padding: 4px;">{{like.like_date.strftime('%d-%m-%Y %H:%M:%S')}}</span><br>#}
+                <div class="text-center mt-2">
+                <a href="/post/{{like.posts.post_id}}/">
+                <span ><img src="/static/images/postpic/{{like.posts.imagepostobj[0].image_url}}" alt="{{like.posts.imagepostobj.image_name}}" class="img img-fluid" style="height: 150px !important; width:fit-content"></span><br>
+                <span style="font-size:12px;"><b>{{like.posts.post_title|title}}</b></span>
+                </a>
+                </div>
+            </div>
+                
+            </div>
+            {% endfor %}
+             <!-- pagination links -->
+         <div class="text-center mt-3">
+             <a href="{{url_for('like_list', page=mylike.prev_num)}}" class="btn btn-outline-primary {% if mylike.page ==  1 %} disabled {% endif %}">&laquo;</a>
+             <!-- looping through the number of pages to display a link for each -->
+             {% for page_num in mylike.iter_pages(left_edge=1, right_edge=1, left_current=1, right_current=2) %}
+
+             {% if page_num %}
+             <!-- check for active page and set the link to active -->
+                 {% if mylike.page == page_num %}
+                 <a href="{{url_for('like_list', page=page_num)}}" class="btn btn-outline-dark">{{page_num}}</a>
+                 {% else %}
+                 <a href="{{url_for('like_list', page=page_num)}}" class="btn btn-outline-dark">{{page_num}}</a>
+                 {% endif %}
+             {% else %}
+             ...
+             {% endif %}
+             {% endfor %}
+             <a href="{{url_for('like_list', page=mylike.next_num)}}" class="btn btn-outline-primary {% if mylike.page ==  mylike.pages %} disabled {% endif %}">&raquo;</a>
+             <p class="text-right mt-3">Showing Page {{mylike.page}} of {{mylike.pages}}</p>
+            <p><a href="{{url_for('customerProfile')}}">Back to Profile</a></p>
+
+         </div>
+         <!-- end pagination -->
+         {% else %}
+         <span>You haven't like a post. </span>
+         {% endif %}
+     </div>
+</div>
+{% elif bk %}
+<div class="container-fluid">
+    <div class="row">
+        {% if bk %}
+             {% for pt in bk.items: %}
+             <div class="col-md-2">
+                 <div class="row">
+                     <div class="col-md-12">
+                         <span class="card text-center" style="background-color:transparent;">
+                             {% if pt.jb_pic %}
+                                 <div class="col-md-12">
+                                     <span class="col-md-2">
+                                         <img src="/static/images/completed_task/{{pt.jb_pic}}" alt="{{pt.jb_id}}" class="img img-fluid" style="height: 150px !important; width:fit-content">
+                                     </span>
+                                 </div>
+                         </span>        
+                                 <div class="col-md-12 text-center" style="background-color: rgb(231, 80, 168); padding: 4px; border-bottom-right-radius: 5px; border-bottom-left-radius: 5px;">
+                                     <span class="text-left" style="font-size:12px;">{{pt.jbcustobj.cust_fname}} {{pt.jbcustobj.cust_lname}}</span>
+                                     <span class="d-flex justify-content-between mt-2">
+                                     <span class="text-left" style="font-size:6px; margin: 2px; padding: 2px; border-radius: 5px; color:#000000">{{pt.jb_date}}</span>
+                                     <span class="text-left" style="font-size:8px; background-color: rgb(245, 238, 239); margin: 2px; padding: 2px; border-radius: 5px; color:#000000">{{pt.jb_status | title}}</span>
+                                     </span>
+                                 </div>
+                             {% else %}
+                                 <span class="col-md-2">
+                                     Add atleast one image to make your post go live on trending
+                                 </span>
+                             {% endif %}                                            
+                             
+                             
+                         
+                     </div>
+                 </div>
+                 
+                 
+             </div>                                
+             {% endfor %}
+             <!-- pagination links -->
+         <div class="text-center mt-3">
+             <a href="{{url_for('jobdone', page=bk.prev_num)}}" class="btn btn-outline-primary {% if bk.page ==  1 %} disabled {% endif %}">&laquo;</a>
+             <!-- looping through the number of pages to display a link for each -->
+             {% for page_num in bk.iter_pages(left_edge=1, right_edge=1, left_current=1, right_current=2) %}
+
+             {% if page_num %}
+             <!-- check for active page and set the link to active -->
+                 {% if bk.page == page_num %}
+                 <a href="{{url_for('jobdone', page=page_num)}}" class="btn btn-outline-dark">{{page_num}}</a>
+                 {% else %}
+                 <a href="{{url_for('jobdone', page=page_num)}}" class="btn btn-outline-dark">{{page_num}}</a>
+                 {% endif %}
+             {% else %}
+             ...
+             {% endif %}
+             {% endfor %}
+             <a href="{{url_for('jobdone', page=bk.next_num)}}" class="btn btn-outline-primary {% if bk.page ==  bk.pages %} disabled {% endif %}">&raquo;</a>
+             <p class="text-right mt-3">Showing Page {{bk.page}} of {{bk.pages}}</p>
+            <p><a href="{{url_for('designerProfile')}}">Back to Profile</a></p>
+
+         </div>
+         <!-- end pagination -->
+         {% else %}
+         <span> You have no job completed. </span>
+         {% endif %}
+     </div>
+</div>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,213 @@
+{% extends 'admin/base.html' %}
+{% block title %}
+Styleit|Profile
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        {% with m = get_flashed_messages(with_categories=true) %}
+            {% for c, i in m %}
+                {% if c == 'success' %}
+                <P class="alert alert-success fw-4">{{i}} </P>
+                {% elif c == 'warning' %}
+                <P class="alert alert-warning fw-4">{{i}} </P>
+                {% else %}
+                <P class="alert alert-danger fw-4">{{i}} </P>
+                {% endif %}
+            {% endfor %} 
+        {% endwith %}
+       
+    </div>
+
+    <div class="row">
+        {% if admin %}
+        <div class="col-md-3 mt-3 mb-3 me-0.3 generalface2 divdisplay">
+            <h4 class="mt-3 text-center">{{prof.admin_fname|title}}'s Profile</h4>
+            <p class="text-center"><img src="/static/images/profile/admin/{{prof.admin_pic}}" class="img img-fluid" style="width: 150px;"></p>
+            <p><span class="me-1" style="font-size:15px">{{prof.admin_fname|title}}</span><span style="font-size:15px">{{prof.admin_lname|title}}</span></p>
+            <p><span style="font-size:15px">{{prof.admin_gender|title}}</span></p>
+            <p><span style="font-size:15px">{{prof.admin_phone}}</span></p>
+            <p><span style="font-size:15px">{{prof.admin_email}}</span></p>
+            {% if prof.admin_id == adm.admin_id %}
+            <p><span style="font-size:15px">Post: </span><span style="font-size:15px">Admin {{prof.admin_id}}</span></p>
+            {% endif %}
+            <div class="row">
+                <div class="col-md-12">
+                    
+                </div>
+            </div>
+        </div>
+        {% elif spadmin %}
+        <div class="col-md-3 mt-3 mb-3 me-0.3 generalface2 divdisplay">
+            <h4 class="mt-3 text-center">{{prof.spadmin_fname|title}}'s Profile</h4>
+            <p class="text-center"><img src="/static/images/profile/spadmin/{{prof.spadmin_pic}}" class="img img-fluid" style="width: 150px;"></p>
+            <p><span class="me-1" style="font-size:15px">{{prof.spadmin_fname|title}}</span><span style="font-size:15px">{{prof.spadmin_lname|title}}</span></p>
+            <p><span style="font-size:15px">{{prof.spadmin_gender|title}}</span></p>
+            <p><span style="font-size:15px">{{prof.spadmin_phone}}</span></p>
+            <p><span style="font-size:15px">{{prof.spadmin_email}}</span></p>
+            {% if prof.spadmin_id == spa.spadmin_id %}
+            <p><span style="font-size:15px">Post: </span><span style="font-size:15px">Super Admin {{prof.spadmin_id}}</span></p>
+            {% endif %}
+            <div class="row">
+                <div class="col-md-12">
+                    <p id="Nad" style="background-color:rgb(219, 27, 194); border-top-left-radius: 20px; border-bottom-left-radius: 20px;"><a href="{{url_for('admin_login')}}"><span class="ms-3">Add New Admin </span></a></p>
+                    <p id="Nad" style="background-color:rgb(219, 27, 194); border-top-left-radius: 20px; border-bottom-left-radius: 20px;"><a href="{{url_for('admin_general_mail')}}"><span class="ms-3">General Mail </span></a></p>
+                    <p id="Nad" style="background-color:rgb(219, 27, 194); border-top-left-radius: 20px; border-bottom-left-radius: 20px;"><a href="{{url_for('staff_activity')}}"><span class="ms-3">Staff Activities </span></a></p>
+                    {#<p id="Nad" style="background-color:rgb(219, 27, 194); border-top-left-radius: 20px; border-bottom-left-radius: 20px;"><a href="{{url_for('admin_login')}}"><span class="ms-3">Bonus Sub for all </span></a></p>#}
+                </div>
+            </div>
+        </div>
+        {% endif %}
+        <div class="col-md-9">
+           <div class="row">
+
+                <div class="col-md-2 bg-primary mt-3">
+                    <div class="row">
+                        <div class="col-md-12">
+                            <p style="background-color:rgb(219, 27, 194); border-top-left-radius: 20px; border-bottom-left-radius: 20px;"><span class="ms-3"><a href="{{url_for('admin_alltrend')}}" style="color:white">Trends</a> </span></p>
+                        </div>
+                        <div class="col-md-12 text-center mt-3 mb-3" style="color:rgb(0, 0, 0)">
+                            <span>Total Trends </span><br><span>{{pstn|length}}</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-md-2 bg-warning mt-3">
+                    <div class="row">
+                        <div class="col-md-12 ">
+                            <p style="background-color:rgb(219, 27, 194); border-top-left-radius: 20px; border-bottom-left-radius: 20px;"><span class="ms-3"><a href="{{url_for('admin_appointment')}}" style="color:white">Appointments</a></span></p>
+                        </div>
+                        <div class="col-md-12 text-center mt-3 mb-3" style="color:rgb(0, 0, 0)">
+                            <span>Total Appointments </span><br><span>{{appt|length}}</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-md-2 bg-primary mt-3">
+                    <div class="row">
+                        <div class="col-md-12">
+                            <p style="background-color:rgb(219, 27, 194); border-top-left-radius: 20px; border-bottom-left-radius: 20px;"><span class="ms-3"><a href="{{url_for('admin_allpment')}}" style="color:white">Payments</a></span></p>
+                        </div>
+                        <div class="col-md-12 text-center mt-3 mb-3" style="color:rgb(0, 0, 0)">
+                            <span>Total Payments: </span><br><span>{{pymt|length}}</span>
+                        </div>
+                    </div>
+                    
+                </div>
+                <div class="col-md-2 bg-danger mt-3">
+                    <div class="row">
+                        <div class="col-md-12">
+                            <p style="background-color:rgb(219, 27, 194); border-top-left-radius: 20px; border-bottom-left-radius: 20px;"><span class="ms-3"><a href="{{url_for('admin_subscription')}}" style="color:white">Subscriptions</a></span></p>
+                        </div>
+                        <div class="col-md-12  text-center mt-3 mb-3" style="color:rgb(0, 0, 0)">
+                            <span>Total Subscriptions </span><br><span>{{sublist|length}}</span>
+                        </div>
+                    </div>
+                    
+                </div>
+                <div class="col-md-2 bg-light mt-3">
+                    <div class="row">
+                        <div class="col-md-12">
+                            <p style="background-color:rgb(219, 27, 194); border-top-left-radius: 20px; border-bottom-left-radius: 20px;"><span class="ms-3"><a href="{{url_for('admin_report')}}" style="color:white">Reports</a> </span></p>
+                        </div>
+                        <div class="col-md-12 text-center mt-3 mb-3" style="color:rgb(0, 0, 0)">
+                            <span>Total Reports </span><br><span>{{srepo|length}}</span>
+                        </div>
+                    </div>
+                    
+                </div>
+                <div class="col-md-2 bg-danger mt-3">
+                    <div class="row">
+                        <div class="col-md-12">
+                            <p style="background-color:rgb(219, 27, 194); border-top-left-radius: 20px; border-bottom-left-radius: 20px;"><span class="ms-3"><a href="{{url_for('admin_report')}}" style="color:white">Likes</a></span></p>
+                        </div>
+                        <div class="col-md-12 text-center mt-3 mb-3" style="color:rgb(0, 0, 0)">
+                            <span>Total Likes </span><br><span>{{lk|length}}</span>
+                        </div>
+                    </div>                    
+                </div>
+           </div>
+           <div class="row">
+            <div class="col-md-2 bg-warning mt-3">
+                <div class="row">
+                    <div class="col-md-12">
+                        <p style="background-color:rgb(219, 27, 194); border-top-left-radius: 20px; border-bottom-left-radius: 20px;"><span class="ms-3"><a href="#" style="color:white">Creators</a></span></p>
+                    </div>
+                    <div class="col-md-12 text-center mt-3 mb-3" style="color:rgb(0, 0, 0)">
+                        <span>Total Creators </span><br><span>{{des|length}}</span>
+                    </div>
+                </div>
+                
+            </div>
+            <div class="col-md-2 bg-primary mt-3">
+                <div class="row">
+                    <div class="col-md-12">
+                        <p style="background-color:rgb(219, 27, 194); border-top-left-radius: 20px; border-bottom-left-radius: 20px;"><span class="ms-3"><a href="#" style="color:white">Clients</a></span></p>
+                    </div>
+                    <div class="col-md-12 text-center mt-3 mb-3" style="color:rgb(0, 0, 0)">
+                        <span>Total Creators </span><br><span>{{cus|length}}</span>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-2 bg-warning mt-3">
+                <div class="row">
+                    <div class="col-md-12">
+                        <p style="background-color:rgb(219, 27, 194); border-top-left-radius: 20px; border-bottom-left-radius: 20px;"><span class="ms-3"><a href="#" style="color:white">Daily Activities</a></span></p>
+                    </div>
+                    <div class="col-md-12 text-center" style="color:rgb(0, 0, 0)">
+                        <span class="me-2" id="today">Today's Task</span><br>
+                        <span id="days">{{day_data|length}}</span>
+                        <p class="col-md-12 text-center" style="color:rgb(0, 0, 0); display: flex; justify-content: space-between;">
+                            <span id="prevday">Prev</span><span id="nextday">Next</span>
+                        </p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-2 bg-light mt-3">
+                <div class="row">
+                    <div class="col-md-12">
+                        <p style="background-color:rgb(219, 27, 194); border-top-left-radius: 20px; border-bottom-left-radius: 20px;"><span class="ms-3"><a href="#" style="color:white">Weekly Activities</a></span></p>
+                    </div>
+                    <div class="col-md-12 text-center" style="color:rgb(0, 0, 0)">
+                        <span class="me-2" id="week">Week Total Task</span><br>
+                        <span id="weeks">{{week_data|length}}</span>
+                        <p class="col-md-12 text-center" style="color:rgb(0, 0, 0); display: flex; justify-content: space-between;">
+                            <span id="prevweek">Prev</span><span id="nextweek">Next</span>
+                        </p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-2 bg-danger mt-3">
+                <div class="row">
+                    <div class="col-md-12">
+                        <p style="background-color:rgb(219, 27, 194); border-top-left-radius: 20px; border-bottom-left-radius: 20px;"><span class="ms-3"><a href="#" style="color:white; font-size: 15px;">Monthly Activities</a></span></p>
+                    </div>
+                    <div class="col-md-12 text-center" style="color:rgb(0, 0, 0)">
+                        <span class="me-2" id="month">This Month Task</span><br>
+                        <span id="months">{{month_data|length}}</span>
+                        <p class="col-md-12 text-center" style="color:rgb(0, 0, 0); display: flex; justify-content: space-between;">
+                            <span id="prevmonth">Prev</span><span id="nextmonth">Next</span>
+                        </p>
+                    </div>
+                </div>                    
+            </div>
+            <div class="col-md-2 bg-light mt-3">
+                <div class="row">
+                    <div class="col-md-12">
+                        <p style="background-color:rgb(219, 27, 194); border-top-left-radius: 20px; border-bottom-left-radius: 20px;"><span class="ms-3"><a href="#" style="color:white">Yearly Activities</a></span></p>
+                    </div>
+                    <div class="col-md-12 text-center" style="color:rgb(0, 0, 0)">
+                        <span class="me-2" id="year">This YearTask</span><br>
+                        <span id="years">{{year_data|length}}</span>
+                        <p class="col-md-12 text-center" style="color:rgb(0, 0, 0); display: flex; justify-content: space-between;">
+                            <span id="prevyear">Prev</span><span id="nextyear">Next</span>
+                        </p>
+                    </div>
+                </div>                    
+            </div>
+           </div>
+        </div>      
+    </div>
+</div>
+{% endblock %}

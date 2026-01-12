@@ -1,0 +1,69 @@
+{% extends 'admin/base.html' %}
+
+
+{% block title %}
+Subscription | Styleit
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-md-4"></div>
+        <div class="col-md-4">
+            <div class="row">
+                <div class="col-md-12 mt-3 mb-3 generalface2" id="sublist">
+                    <div class="row">                
+                        <div class="col-md-12">
+                            {% for y in sublist.items %}
+                            <div class="col-md-12 mt-3 mb-3" id="divdisplay">
+                                <div class="row">
+                                    <div class="col-md-3 mt-3">
+                                        <img src="/static/images/profile/designer/{{y.subdesiobj.desi_pic}}" alt="{{y.subdesiobj.desi_fname}}" class="img-rounded-circle img-fluid"> 
+                                    </div>
+                                    <div class="col-md-9 p-3">
+                                        <span class="">
+                                            <p style="font-size:12px;"> Business Name: {{y.subdesiobj.desi_businessName}}</p>
+                                            <p style="font-size:12px;">Subscription Plan: {{y.sub_plan}}</p>
+                                            <p style="font-size:12px;">Subscription Date: {{y.sub_date}}</p>
+                                            <p style="font-size:12px;">Subscription Status: {{y.sub_paystatus}}</p>
+                                            <p style="font-size:12px;">Subscription Ref No: {{y.sub_ref}}</p>
+                                            <p style="font-size:12px;">Start Date: {{y.sub_startdate}}</p>
+                                            <p style="font-size:12px;">Start Date: {{y.sub_enddate}}</p>
+                                            <p style="font-size:12px;">Subscription Status: {{y.sub_status}}</p>                                                            
+
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                            {% endfor %}
+        
+                            <!-- pagination links -->
+                            <div class="text-center mt-3">
+                                <a href="{{url_for('admin_subscription', page=sublist.prev_num)}}" class="btn btn-outline-primary {% if sublist.page ==  1 %} disabled {% endif %}">&laquo;</a>
+                                <!-- looping through the number of pages to display a link for each -->
+                                {% for page_num in sublist.iter_pages(left_edge=1, right_edge=1, left_current=1, right_current=2) %}
+        
+                                {% if page_num %}
+                                <!-- check for active page and set the link to active -->
+                                    {% if sublist.page == page_num %}
+                                    <a href="{{url_for('admin_subscription', page=page_num)}}" class="btn btn-outline-dark">{{page_num}}</a>
+                                    {% else %}
+                                    <a href="{{url_for('admin_subscription', page=page_num)}}" class="btn btn-outline-dark">{{page_num}}</a>
+                                    {% endif %}
+                                {% else %}
+                                ...
+                                {% endif %}
+                                {% endfor %}
+                                <a href="{{url_for('admin_subscription', page=sublist.next_num)}}" class="btn btn-outline-primary {% if sublist.page ==  sublist.pages %} disabled {% endif %}">&raquo;</a>
+                                <p class="text-right mt-3">Showing Page {{sublist.page}} of {{sublist.pages}}</p>
+                            </div>
+                            <!-- end pagination -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4"></div>
+    </div>
+</div>
+{% endblock %}

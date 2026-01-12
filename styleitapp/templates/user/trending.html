@@ -1,0 +1,93 @@
+{% extends 'user/base.html' %}
+
+{% block title %}
+Styleit | Trending
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="container">
+        <div class="row">
+            <div class="col-md-3"></div>
+            <div class="col-md-6">
+                <div class="row">
+                    <div class="col-12 mt-3 mb-3 mt-3" id="post-list">
+                        {% for y in pstn %}
+                        <div class="col-md-12 mb-3 mt-3 post" id="divdisplay">
+                            {% if y.post_suspend=="suspended" %}
+                            <a href="/post/{{y.post_id}}">
+                                <span class="p-3">
+                                    <img src="/static/images/profile/designer/{{y.designerobj.desi_pic}}" width="50" alt="{{y.designerobj.desi_fname}}" class="img-rounded-circle"> 
+                                    
+                                    <span style="font-size:10px;">Posted by: {{y.designerobj.desi_businessName}}</span>
+                                    <span style="font-size:10px;">{{y.post_date.strftime('%d-%m-%Y %H:%M:%S')}}</span>
+                                </span>
+                                <p class="p-3">This post has been suspended</p>
+                            </a>
+                            {% elif y.post_delete=='deleted' %}
+                            <a href="/post/{{y.post_id}}">
+                                <span class="p-3">
+                                    <img src="/static/images/profile/designer/{{y.designerobj.desi_pic}}" width="50" alt="{{y.designerobj.desi_fname}}" class="img-rounded-circle"> 
+                                    
+                                    <span style="font-size:10px;">Posted by: {{y.designerobj.desi_businessName}}</span>
+                                    <span style="font-size:10px;">{{y.post_date.strftime('%d-%m-%Y %H:%M:%S')}}</span>
+                                </span>
+                                <p class="p-3">This post has been deleted by the user or unavailable</p>
+                            </a>
+                            {% else %}
+                            <a href="/post/{{y.post_id}}">
+                            <span class="p-3">
+                                <img src="/static/images/profile/designer/{{y.designerobj.desi_pic}}" width="50" alt="{{y.designerobj.desi_fname}}" class="img-rounded-circle"> 
+                                
+                                <span style="font-size:10px;">Posted by: {{y.designerobj.desi_businessName}}</span>
+                                <span style="font-size:10px;">{{y.post_date.strftime('%d-%m-%Y %H:%M:%S')}}</span>
+                            </span>
+                            <div class="text-justify">
+                                <span class="p-3 text-justify"><b>{{y.post_title}}</b></span>
+                            </div>
+                            <div class="p-3 text-justify">
+                                <span class="text-justify">{{y.post_body| truncate(250)}}</span>
+                                
+                            </div>
+                            </a>
+                            
+                            <!-- numbers of likes  -->
+                            {% if y.likes| length == 1 %}
+                            <span class="p-3 m-3">{{ y.likes| length }} <i class="fas fa-thumbs-up"></i> Like</span>
+                            {% elif y.likes| length > 1 %}
+                            <span class="p-3 m-3">{{ y.likes| length }} <i class="fas fa-thumbs-up"></i> Likes</span>
+                            {% else %}
+                            <span class="p-3 m-3"><i class="far fa-thumbs-up"></i> Like</span>
+                            {% endif %}
+
+                            <!-- numbers of comments -->
+                            {% if y.postcomobj|length == 1 %}
+                            <span class="p-3 m-3"> {{y.postcomobj|length}} <i class="fas fa-comment"></i> Comment</span>
+                            {% elif y.postcomobj|length > 1 %}
+                            <span class="p-3 m-3"> {{y.postcomobj|length}} <i class="fas fa-comment"></i> Comments</span>
+                            {% else %}
+                            <span class="p-3 m-3"> {{y.postcomobj|length}} <i class="fas fa-comment"></i> Comment</span>
+                            {% endif %}
+
+                            <!-- numbers of shares -->
+                            {% if y.sharepostobj|length == 1 %}
+                            <span class="p-3 m-3"> {{y.sharepostobj|length}} <i class="fas fa-share-alt"></i> Share</span>
+                            {% elif y.sharepostobj|length > 1 %}
+                            <span class="p-3 m-3"> {{y.sharepostobj|length}} <i class="fas fa-share-alt"></i> Shares</span>
+                            {% else %}
+                            <span class="p-3 m-3"> {{y.sharepostobj|length}} <i class="fas fa-share-alt"></i> Share</span>
+                            {% endif %}
+                            
+                            {% endif %}
+                        </div> 
+                        {% endfor %}        
+                    </div>
+                    
+                </div>
+            </div>
+            <div class="col-md-3"></div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}

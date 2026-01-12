@@ -1,0 +1,75 @@
+{% extends 'admin/base.html' %}
+
+{% block title %}
+Payment | Styleit
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-md-4"></div>
+        <div class="col-md-4">
+            <div class="row">
+                <div class="col-md-12 mt-3 mb-3 generalface2" id="payment">
+                    <div class="row">                
+                        <div class="col-md-8">
+                            {% for y in pymt.items %}
+                            <div class="col-md-12 mt-3 mb-3" id="divdisplay">
+                                <div class="row">
+                                    <div class="col-md-3 mt-3">
+                                        <img src="/static/images/profile/designer/{{y.desipaymentobj.desi_pic}}" alt="{{y.desipaymentobj.desi_fname}}" class="img-rounded-circle img-fluid"> 
+                                    </div>
+                                    <div class="col-md-9 p-3">
+                                        <span>
+                                            <p style="font-size:12px;"> Business Name: {{y.desipaymentobj.desi_businessName}}</p>
+                                            <p style="font-size:12px;">Amount Paid: {{y.payment_amount}}</p>
+                                            <p style="font-size:12px;">Payment Date: {{y.payment_transdate}}</p>
+                                            <p style="font-size:12px;">Payment Status: {{y.payment_status}}</p>
+                                            <p style="font-size:12px;">Ref No: {{y.payment_transNo}}</p>                                                            
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                            {% endfor %}
+        
+                            <!-- pagination links -->
+                            <div class="text-center mt-3">
+                                <a href="{{url_for('admin_allpment', page=pymt.prev_num)}}" class="btn btn-outline-primary {% if pymt.page ==  1 %} disabled {% endif %}">&laquo;</a>
+                                <!-- looping through the number of pages to display a link for each -->
+                                {% for page_num in pymt.iter_pages(left_edge=1, right_edge=1, left_current=1, right_current=2) %}
+        
+                                {% if page_num %}
+                                <!-- check for active page and set the link to active -->
+                                    {% if pymt.page == page_num %}
+                                    <a href="{{url_for('admin_allpment', page=page_num)}}" class="btn btn-outline-dark">{{page_num}}</a>
+                                    {% else %}
+                                    <a href="{{url_for('admin_allpment', page=page_num)}}" class="btn btn-outline-dark">{{page_num}}</a>
+                                    {% endif %}
+                                {% else %}
+                                ...
+                                {% endif %}
+                                {% endfor %}
+                                <a href="{{url_for('admin_allpment', page=pymt.next_num)}}" class="btn btn-outline-primary {% if pymt.page ==  pymt.pages %} disabled {% endif %}">&raquo;</a>
+                                <p class="text-right mt-3">Showing Page {{pymt.page}} of {{pymt.pages}}</p>
+                            </div>
+                            <!-- end pagination -->
+                        </div>
+                        <div class="col-md-4 mt-3 mb-3 generalface2">
+                            
+                        </div>
+                    </div>
+                    
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4 mt-3 mb-3 generalface2">
+            <div style="display: flex;" >
+                <input type="text" name="searchref" id="searchref" placeholder="Search by reference number" class="form-control mb-3 me-2">
+                <button type="submit" id="refbtn" class="btn btn-outline-dark mb-3">search</button>
+                </div>
+                <div id="displaysearch">
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

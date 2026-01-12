@@ -1,0 +1,66 @@
+{% extends 'admin/base.html' %}
+
+{% block title %}
+Appointment | Styleit
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-md-4"></div>
+        <div class="col-md-4">
+            <div class="row">
+                <div class="col-md-12 mt-3 mb-3 generalface2" id="appoint">
+                    <div class="row">                
+                        <div class="col-md-12">
+                            {% for y in appt.items %}
+                            <div class="col-md-12 mt-3 mb-3" id="divdisplay">
+                                <div class="row">
+                                    <div class="col-md-3 text-center p-2">
+                                        <img src="/static/images/profile/customer/{{y.custbaobj.cust_pic}}" width="50" alt="{{y.custbaobj.cust_fname}}" class="img img-fluid ">
+                                    </div>
+                                    <div class="col-md-9 p-3">
+                                        <span>    
+                                            <span style="font-size:12px;"> {{y.custbaobj.cust_fname}} Booked {{y.desibaobj.desi_businessName}}</span><br>
+                                            <span style="font-size:12px;">Book Date: {{y.ba_bookingDate}}</span><br>
+                                            <span style="font-size:12px;">Book Time: {{y.ba_bookingTime}}</span><br>
+                                            <span style="font-size:12px;">Collection Date: {{y.ba_collectionDate}}</span><br>
+                                            <span style="font-size:12px;">Collection Time: {{y.ba_collectionTime}}</span><br>
+                                            <span style="font-size:12px;">Appointment Status: {{y.ba_status}}</span>                                 
+                                        </span>
+                                    </div>
+                                </div> 
+                                 
+                            </div>
+                            {% endfor %}
+        
+                            <!-- pagination links -->
+                            <div class="text-center mt-3">
+                                <a href="{{url_for('admin_appointment', page=appt.prev_num)}}" class="btn btn-outline-primary {% if appt.page ==  1 %} disabled {% endif %}">&laquo;</a>
+                                <!-- looping through the number of pages to display a link for each -->
+                                {% for page_num in appt.iter_pages(left_edge=1, right_edge=1, left_current=1, right_current=2) %}
+        
+                                {% if page_num %}
+                                <!-- check for active page and set the link to active -->
+                                    {% if appt.page == page_num %}
+                                    <a href="{{url_for('admin_appointment', page=page_num)}}" class="btn btn-outline-dark">{{page_num}}</a>
+                                    {% else %}
+                                    <a href="{{url_for('admin_appointment', page=page_num)}}" class="btn btn-outline-dark">{{page_num}}</a>
+                                    {% endif %}
+                                {% else %}
+                                ...
+                                {% endif %}
+                                {% endfor %}
+                                <a href="{{url_for('admin_appointment', page=appt.next_num)}}" class="btn btn-outline-primary {% if appt.page ==  appt.pages %} disabled {% endif %}">&raquo;</a>
+                                <p class="text-right mt-3">Showing Page {{appt.page}} of {{appt.pages}}</p>
+                            </div>
+                            <!-- end pagination -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4"></div>
+    </div>
+</div>
+{% endblock %}

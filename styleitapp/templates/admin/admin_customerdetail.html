@@ -1,0 +1,62 @@
+{% extends 'admin/base.html' %}
+{% block title %}
+Styleit | Customer's Profile
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="container">
+        <div class="row">
+            <div class="col">
+                <span>
+                    {% with m = get_flashed_messages(with_categories=true) %}
+                        {% for c, i in m %}
+                            {% if c == 'success' %}
+                            <P class="alert alert-success fw-4">{{i}} </P>
+                            {% elif c == 'warning' %}
+                            <P class="alert alert-warning fw-4">{{i}} </P>
+                            {% else %}
+                            <P class="alert alert-danger fw-4">{{i}} </P>
+                            {% endif %}
+                        {% endfor %} 
+                    {% endwith %}
+                </span>
+            </div>
+        </div>
+        <div class="row">
+            <div class="col-md-3"></div>
+            <div class="col-md-6">
+                <div class="row">
+                    <div class="col-md-12 mt-3 mb-3" id="alldesigner">
+                        <div class="row">
+                            <div class="col-md-12" style="display:flex; flex-direction: row; background-color: rgb(77, 10, 141);">
+                                
+                                <div>
+                                    <img src="/static/images/profile/designer/{{design.cust_pic}}" alt="{{design.cust_fame}}"  style="width:50; height:50; border-radius: 50%; object-fit:cover;" width="150">
+                                </div>
+                                
+                                <div class="p-2 text-center" style="line-height:2; color:white"> 
+                                <p class="fs-1"><b>{{design.cust_fname}}</b></p>
+                                </div>
+                            </div>
+                            <div class="col-md-12 mt-2">                                
+                                <p>First Name: <b>{{design.cust_fname}}</b></p>
+                                <p>Last Name: <b>{{design.cust_lname}}</b></p>
+                                <p>State: <b>{{design.stateobj.state_name}}</b></p>
+                                <p>L.G.A: <b>{{design.lgaobj.lga_name}}</b></p>
+                            </div>
+                            <input type="hidden" name="cust_id" id="cust_id" value="{{design.cust_id}}">
+                            {% if design.cust_access=='actived' %}
+                            <span class="btn btn-success" id="deactivate2">Deactivate</span>
+                            {% elif design.cust_acess=='deactived' %}
+                            <span class="btn btn-success" id="activate2">Activate</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3"></div>
+        </div>
+    </div>
+</div>
+{% endblock %}

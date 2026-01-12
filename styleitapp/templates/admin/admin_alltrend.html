@@ -1,0 +1,92 @@
+{% extends 'admin/base.html' %}
+
+{% block title %}
+All trend | styleit
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-md-3"></div>
+        <div class="col-md-6">
+            <div class="row">
+                <div class="col-md-12 mt-3 mb-3 generalface2"  id="tred">
+                    <div class="row">                
+                        <div class="col-md-12">
+                            {% for y in pstn.items %}
+                            <div class="col-md-12 mt-3 mb-3" id="divdisplay">
+                                <a href="/adminpost/{{y.post_id}}">
+                                <span class="p-3">
+                                    <img src="/static/images/profile/designer/{{y.designerobj.desi_pic}}" width="50" alt="{{y.designerobj.desi_fname}}" class="img-rounded-circle"> 
+                                    
+                                    <span style="font-size:10px;">Posted by: {{y.designerobj.desi_businessName}}</span>
+                                    <span style="font-size:10px;">{{y.post_date.strftime('%d-%m-%Y %H:%M:%S')}}</span>
+                                </span>
+                                <div class="text-justify">
+                                    <span class="p-3 text-justify"><b>{{y.post_title}}</b></span>
+                                </div>
+                                <div class="p-3 text-justify">
+                                    <span class="text-justify">{{y.post_body| truncate(250)}}</span>
+                                </div>
+                                
+                                </a>
+                                
+                                <!-- numbers of likes  -->
+                                {% if y.likes| length == 1 %}
+                                <span class="p-3 m-3">{{ y.likes| length }} <i class="fas fa-thumbs-up"></i> Like</span>
+                                {% elif y.likes| length > 1 %}
+                                <span class="p-3 m-3">{{ y.likes| length }} <i class="fas fa-thumbs-up"></i> Likes</span>
+                                {% else %}
+                                <span class="p-3 m-3"><i class="far fa-thumbs-up"></i> Like</span>
+                                {% endif %}
+                                
+                                <!-- numbers of comment -->
+                                {% if y.postcomobj | length == 1 %}
+                                <span class="p-3 m-3"> {{y.postcomobj | length}} <i class="fas fa-comment"></i> Comments</span>
+                                {% elif y.postcomobj | length > 1 %}
+                                <span class="p-3 m-3"> {{y.postcomobj | length}} <i class="fas fa-comment"></i> Comments</span>
+                                {% else %}
+                                <span class="p-3 m-3"> {{y.postcomobj | length}} <i class="fas fa-comment"></i> Comment</span>
+                                {% endif %}
+            
+                                <!-- numbers of shares -->
+                                {% if y.sharepostobj|length == 1 %}
+                                <span class="p-3 m-3"> {{y.sharepostobj|length}} <i class="fas fa-share-alt"></i> Share</span>
+                                {% elif y.sharepostobj|length > 1 %}
+                                <span class="p-3 m-3"> {{y.sharepostobj|length}} <i class="fas fa-share-alt"></i> Shares</span>
+                                {% else %}
+                                <span class="p-3 m-3"> {{y.sharepostobj|length}} <i class="fas fa-share-alt"></i> Share</span>
+                                {% endif %}
+                            </div>
+                            {% endfor %}
+            
+                            <!-- pagination links -->
+                            <div class="text-center mt-3">
+                                <a href="{{url_for('admin_alltrend', page=pstn.prev_num)}}" class="btn btn-outline-primary {% if pstn.page ==  1 %} disabled {% endif %}">&laquo;</a>
+                                <!-- looping through the number of pages to display a link for each -->
+                                {% for page_num in pstn.iter_pages(left_edge=1, right_edge=1, left_current=1, right_current=2) %}
+            
+                                {% if page_num %}
+                                <!-- check for active page and set the link to active -->
+                                    {% if pstn.page == page_num %}
+                                    <a href="{{url_for('admin_alltrend', page=page_num)}}" class="btn btn-outline-dark">{{page_num}}</a>
+                                    {% else %}
+                                    <a href="{{url_for('admin_alltrend', page=page_num)}}" class="btn btn-outline-dark">{{page_num}}</a>
+                                    {% endif %}
+                                {% else %}
+                                ...
+                                {% endif %}
+                                {% endfor %}
+                                <a href="{{url_for('admin_alltrend', page=pstn.next_num)}}" class="btn btn-outline-primary {% if pstn.page ==  pstn.pages %} disabled {% endif %}">&raquo;</a>
+                                <p class="text-right mt-3">Showing Page {{pstn.page}} of {{pstn.pages}}</p>
+                            </div>
+                            <!-- end pagination -->
+                        </div>
+                    </div> 
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3"></div>
+    </div>
+</div>
+{% endblock %}

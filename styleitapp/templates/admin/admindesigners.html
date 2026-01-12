@@ -1,0 +1,71 @@
+{% extends 'admin/base.html' %}
+{% block title %}
+Styleit | All designers
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="container">
+        <div class="row">
+            <div class="col-md-3"></div>
+            <div class="col-md-6">
+                <div class="row">
+                    {% for desi in design.items %}
+                    <div class="col-md-12 mt-3 mb-3" id="alldesigner">
+                        <div class="row">
+                            <div class="col-md-5"><a href="/designers/{{desi.desi_id}}">
+                                <img src="/static/images/profile/designer/{{desi.desi_pic}}" alt="{{desi.desi_businessName}}" class="img-fluid" width="150">  
+                            </a></div>
+                            <div class="col-md-7 mt-3"><a href="/designers/{{desi.desi_id}}">
+                                <p><b>{{desi.desi_businessName}}</b></p>
+                                {% if desi.lgaobj2 %}
+                                    <p>L.G.A: {{desi.lgaobj2.lga_name}}</p>
+                                {% else %}
+                                    <p>City: {{desi.desi_city}}</p>
+                                {% endif %}
+                                {% if desi.stateobj2 %}
+                                <p>State: {{desi.stateobj2.state_name}}</p>
+                                {% else %}
+                                    <p>State: {{desi.desi_state}}</p>
+                                {% endif %}
+                                <p>Country: {{desi.desicountry.country_name}}</p>
+                                
+                                {% if desi.desi_status=='actived' %}
+                                    <p>Status: {{desi.desi_status}}</p>
+                                {% else %}
+                                    <p>Status: {{desi.desi_status}}</p>
+                                {% endif %}
+                                
+
+                            </a></div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                    <!-- pagination links -->
+                    <div class="text-center mt-3">
+                        <a href="{{url_for('admin_designers', page=design.prev_num)}}" class="btn btn-outline-primary {% if design.page ==  1 %} disabled {% endif %}">&laquo;</a>
+                        <!-- looping through the number of pages to display a link for each -->
+                        {% for page_num in design.iter_pages(left_edge=1, right_edge=1, left_current=1, right_current=2) %}
+
+                        {% if page_num %}
+                        <!-- check for active page and set the link to active -->
+                            {% if design.page == page_num %}
+                            <a href="{{url_for('admin_designers', page=page_num)}}" class="btn btn-outline-dark">{{page_num}}</a>
+                            {% else %}
+                            <a href="{{url_for('admin_designers', page=page_num)}}" class="btn btn-outline-dark">{{page_num}}</a>
+                            {% endif %}
+                        {% else %}
+                        ...
+                        {% endif %}
+                        {% endfor %}
+                        <a href="{{url_for('admin_designers', page=design.next_num)}}" class="btn btn-outline-primary {% if design.page ==  design.pages %} disabled {% endif %}">&raquo;</a>
+                        <p class="text-right mt-3">Showing Page {{design.page}} of {{design.pages}}</p>
+                    </div>
+                    <!-- end pagination -->
+                </div>
+            </div>
+            <div class="col-md-3"></div>
+        </div>
+    </div>
+</div>
+{% endblock %}

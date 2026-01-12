@@ -1,0 +1,50 @@
+{% extends 'user/base.html' %}
+
+{% block title %}
+Styleit | Comfirm payment
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col">
+            <span>
+                {% with m = get_flashed_messages(with_categories=true) %}
+                    {% for c, i in m %}
+                        {% if c == 'success' %}
+                        <P class="alert alert-success fw-4">{{i}} </P>
+                        {% elif c == 'warning' %}
+                        <P class="alert alert-warning fw-4">{{i}} </P>
+                        {% else %}
+                        <P class="alert alert-danger fw-4">{{i}} </P>
+                        {% endif %}
+                    {% endfor %} 
+                {% endwith %}
+            </span>
+        </div>
+    </div>
+    <div class="row">
+        <div class="col-md-4"></div>
+        <div class="col-md-4 mt-3 mb-3">
+            <form method="POST" action="{{url_for('payment')}}">
+                <input type="hidden" name="csrf_token" value="{{csrf_token()}}">
+            <label> Full Name:</label>
+            <p>{{pymt.desipaymentobj.desi_fname}} {{pymt.desipaymentobj.desi_lname}}</p>
+            <label>Business Name: </label>
+            <p>{{pymt.desipaymentobj.desi_businessName}}</p>
+            <label>Payment Date</label>
+            <p>{{pymt.payment_transdate}}</p>
+            <label>Payment Refrence No</label>
+            <p>{{pymt.payment_transNo}}</p>
+            <label>Amount Paid </label>
+            <p>{{pymt.payment_amount}}</p>
+            <label>Payment Status</label>
+            <p>{{pymt.payment_status}}</p> 
+            <button type="submit" class="form-control mt-3 mb-3 btn btn-danger"> Pay Now </button>
+            </form>
+        </div>
+        <div class="col-md-4"></div>
+    </div>
+</div>
+
+{% endblock %}

@@ -1,0 +1,53 @@
+{% extends 'user/base.html' %}
+
+{% block title %}
+Styleit | Report
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col">
+            <span>
+                {% with m = get_flashed_messages(with_categories=true) %}
+                    {% for c, i in m %}
+                        {% if c == 'success' %}
+                        <P class="alert alert-success fw-4">{{i}} </P>
+                        {% elif c == 'warning' %}
+                        <P class="alert alert-warning fw-4">{{i}} </P>
+                        {% else %}
+                        <P class="alert alert-danger fw-4">{{i}} </P>
+                        {% endif %}
+                    {% endfor %} 
+                {% endwith %}
+            </span>
+        </div>
+    </div>
+    <div class="row">
+        <div class="col-md-4"></div>
+        <div class="col-md-4">
+            <form method="POST" action="{{url_for('reports')}}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" class="form-control">
+                {% if desiloggedin %}
+                    {% if design2.desi_id != desiloggedin %}
+                    <input type="hidden" name="desid" value="{{design2.desi_id}}" class="form-control">
+                    {% elif design2.desi_id == desiloggedin %}
+                    <input type="hidden" name="desid" value="{{design2.desi_id}}" class="form-control">
+                    {% else %}
+                    <input type="hidden" name="custid" value="{{design.cust_id}}" class="form-control">
+                    {% endif %}
+                    <input type="hidden" name="desname" value="{{des.desi_businessName}}" class="form-control">
+                {% elif loggedin %}
+                <input type="hidden" name="desid" value="{{design.desi_id}}" class="form-control">
+                <input type="hidden" name="custname" value="{{cus.cust_username}}" class="form-control">
+                {% endif %}
+                
+                <label class="mb-2 mt-2">Write your report below</label>
+                <textarea name="report" class="form-control mb-2 mt-2" maxlength="500" style="resize: none; background-color: transparent;" id="textarea"></textarea>
+                <button type="submit" class="btn btn-outline-primary">Submit</button>
+            </form>
+        </div>
+        <div class="col-md-4"></div>
+    </div>
+</div>
+{% endblock %}

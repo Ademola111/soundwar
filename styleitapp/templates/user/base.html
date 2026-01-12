@@ -1,0 +1,731 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <!-- <meta content="5"; url="http://127.0.0.1:8080/trending/" http-equiv="refresh"> -->
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %} {% endblock %}</title>
+    <!-- External stylesheet-->
+		<link href="{{url_for('static', filename='css/styleit.css')}}" rel="stylesheet" type="text/css">
+    <!-- Share on cdn -->
+    <link href="https://cdn.jsdelivr.net/npm/shareon@2/dist/shareon.min.css" rel="stylesheet">
+		<!-- bootstrap -->
+		<link href="{{url_for('static', filename='css/css/bootstrap.css')}}" rel="stylesheet" type="text/css">
+
+		<!-- metas-->
+		<meta charset="utf-8">
+		<meta name="description" content="styleit your No1 fashion hub in Nigeria">
+		<meta name="author" content="styleit Africa">
+		<meta name="keywords" content="styleit, best fashion but in Nigeria, tailor, fashion, fashionista, owanbe, ceremonies, african styles, international styles, designer, suit wears, female dress, male wears, agbada, buba, sokoto, abaya">
+		
+		<!--facebook meta integration-->
+		<meta property="og:https://www.styleit.africa" content="Styleit is a home of professional fashionista"/>
+		<meta property="og:https://www.styleit.africa/home" content="website"/>
+		<meta property="og:image" content="images/ceo.jpg"/>
+		<meta property="og:image-width" content="400"/>
+		<meta property="og:image-height" content="300"/>
+		<meta property="og:locale:alternative" content="fr_FR"/>
+		<meta property="og:url" content="https://www.styleit.africa"/>
+		
+		<!-- twitter meta integeration-->
+		<meta name="twitter.www.styleit.africa" content="@styleitafrica"/>
+		<meta name="twitter.title" content="@styleitafrica"/>
+		<meta name="twitter.card" content="styleit is your No1 home of professional fashionista"/>
+		<meta name="twitter.description" content="Styleit, best fashion but in Nigeria, tailor, fashion, fashionista, owanbe, ceremonies, african styles, international styles, designer, suit wears, female dress, male wears, agbada, buba, sokoto, abaya"/>
+		<meta name="twitter.url" content="https://www.styleit.africa"/>
+		
+		<!-- fav icon -->
+		<link rel="apple-touch-icon" sizes="180x180" href="/static/images/apple-touch-icon.png">
+		<link rel="icon" type="image/png" sizes="32x32" href="/static/images/favicon-32x32.png">
+		<link rel="icon" type="image/png" sizes="16x16" href="/static/images/favicon-16x16.png">
+		<link rel="manifest" href="/static/images/site.webmanifest">
+
+		<!-- font awesome -->
+		<link href="{{url_for('static', filename='fa/css/all.min.css')}}" rel="stylesheet">
+
+
+		<!-- jquery animation-->
+		<link href="{{url_for('static', filename='css/css/animate.min.css')}}" rel="stylesheet">
+
+		<!-- internal stylesheet-->
+		<style type="text/css">
+			
+		
+		</style>
+    
+</head>
+
+<body id="body">
+    <!-- header section -->
+<div class="container-fluid">
+    <div class="container-fluid" id="header">
+        <header>
+            <div class="row">
+                {#<div class="col-md-2 mt-5 mb-5" id="logo">
+                    <h1 id="logoname">Styleit</h1>
+                </div>#}
+                    
+                <div class="col-md-12 mt-5 b-5 text-center" id="banner">
+                  <a href="https://www.styleit.africa"> 
+                    <img src="{{url_for('static', filename='images/logo11.png')}}" alt="logo1">
+                  </a>
+                </div>
+            </div>
+        </header>
+    </div>
+</div>
+<div class="container-fluid sticky-top">
+  <!-- navigation section -->
+  <div class="row mt-2" id="navi">
+    <nav class="navbar navbar-expand-lg navbar-light bg-light">
+        <div class="container-fluid">
+          <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarSupportedContent" aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
+          <span class="navbar-toggler-icon"></span>
+          </button>
+          <div class="collapse navbar-collapse" id="navbarSupportedContent">
+            <ul class="navbar-nav me-auto mb-2 mb-lg-0">
+              {% if session.get('customer') != None: %}
+              <form class="d-flex" id="search" method="POST" action="{{url_for('search')}}">
+                <input type="hidden" name="csrf_token" value="{{csrf_token()}}">
+                <button class="btn btn-outline-success me-2" type="submit">Search</button>
+                <input class="form-control" type="search" name="search" placeholder="Post search" aria-label="Search">
+              </form>
+              <li class="nav-item">
+                <a class="nav-link active" href="{{url_for('trending')}}">Trending</a>
+              </li>
+              <li class="nav-item">
+                <a class="nav-link active" href="{{url_for('designers')}}">Creators</a>
+              </li>
+              {% elif session.get('designer') != None: %}
+              <form class="d-flex" id="search" method="POST" action="{{url_for('search')}}">
+                <input type="hidden" name="csrf_token" value="{{csrf_token()}}">
+                
+                <input class="form-control" type="search" name="search" placeholder="Post search" aria-label="Search" required="required">
+                <button class="btn btn-outline-success ms-2" type="submit">Search</button>
+              </form>
+              <li class="nav-item">
+                <a class="nav-link active" href="{{url_for('trending')}}">Trending</a>
+              </li>
+              <li class="nav-item">
+                <a class="nav-link active" href="{{url_for('designers')}}">Creators</a>
+              </li>
+              {% endif %}
+              </ul>
+              
+              <ul class="navbar-nav">
+                {% if session.get('customer') != None and cus.cust_status=='actived' %}
+                {#<li class="nav-item">
+                  <a class="nav-link" href="#">Welcome! <img src="/static/images/profile/customer/{{cus.cust_pic}}" alt="{{cus.cust_fname}}" width="25px" class="img rounded-circle">{{cus.cust_fname}}</a>
+                </li>#}
+                <li class="nav-item">
+                  {% if noti|length > 0 %}
+                  <i class="fa-solid fa-bell nav-link generalface2" id="notif" style="display: block; position:relative"><sup class="supnoti" >{{noti|length}}</sup></i>
+                  <div style="display:none; position:absolute; background-color: whitesmoke; padding:10px; margin:auto;" id="note">
+                    {% for nt in noti %}
+                    {% if cus.cust_id %}
+                      {% if nt.notifypostobj or nt.notifylikeobj or nt.notifycomobj or nt.notifyshareobj or nt.notifybaobj or  nt.notifysubobj or nt.notifypayobj or nt.notifytpayobj %}
+                        <span style="padding:2px; margin:auto;"> 
+                          {% if nt.notify_postid and nt.notify_custid==cus.cust_id %}
+                          <a href="/posti/{{nt.notifypostobj.post_id}}"><span id="com4" data-value="{{nt.notify_postid}}" style="padding:auto; margin:auto; text-align:left;" >You commented on a post</span></a>
+                          {% endif %}
+
+                          {% if nt.notify_likeid and nt.notify_custid==cus.cust_id %}
+                            <a href="/postlike/{{nt.notifylikeobj.like_id}}" id="lik1"><span id="{{nt.notify_likeid}}" >You like a post</span></a>
+                          {% endif %} 
+
+                          {% if nt.notify_comid and nt.notify_custid==cus.cust_id %}
+                            <a href="/postreply/{{nt.notifycomobj.com_id}}" id="pin2"><span id="{{nt.notify_comid}}" >You reply to a comment</span></a>
+                          {% endif %}
+
+                          {% if nt.notify_comid and nt.notify_custid != cus.cust_id %}
+                            {% if nt.notifydesiobj %}
+                            <a href="/postreply/{{nt.notifycomobj.com_id}}" id="pin13"><span id="{{nt.notify_comid}}">{{ nt.notifydesiobj.desi_fname }} reply to your comment</span></a>
+                            {% elif nt.notifycustobj %}
+                            <a href="/postreply/{{nt.notifycomobj.com_id}}" id="pin3"><span id="{{nt.notify_comid}}">{{ nt.notifycustobj.cust_fname }} reply to your comment</span></a>
+                            {% endif %}
+                          {% endif %}
+
+                          {% if nt.notify_shareid and nt.notify_custid==cus.cust_id %}
+                            <a href="/postshare/{{nt.notifyshareobj.share_id}}" id="pin4"><span id="{{nt.notify_shareid}}" >You shared a post</span></a>
+                          {% endif %} 
+
+                          {% if nt.notify_baid and nt.notify_custid==cus.cust_id %}
+                          <a href="/bookapp/{{nt.notifybaobj.ba_id}}/" id="pin5"><span id="{{nt.notify_baid}}" >You have booked an appointment with {{nt.notifybaobj .desibaobj.desi_businessName}}</span></a>
+                          {% endif %}
+
+                          {% if nt.notify_tpayid and nt.notify_custid==cus.cust_id %}
+                            {% if nt.notifytpayobj.tpay_status == 'paid' %}
+                            <a href="/notetpay/{{nt.notifytpayobj.tpay_id}}/"><span style="padding:auto; margin:auto; text-align:left;" id="{{nt.notify_tpayid}}" value="{{nt.notify_tpayid}}">Your payment is successful</span></a>
+                            {% elif nt.notifytpayobj.tpay_status == 'failed' or nt.notifytpayobj.tpay_status == 'pending' %}
+                            <a href="/notetpay/{{nt.notifytpayobj.tpay_id}}/"><span style="padding:auto; margin:auto; text-align:left;" id="{{nt.notify_tpayid}}" value="{{nt.notify_tpayid}}">Your payment is unsuccessful</span></a>
+                            {% endif %}
+                          {% endif %}
+                        </span><br>
+                      {% endif %}
+                    {% endif %}
+                    {% endfor %}
+                  </div>
+                  {% else %}
+                  <i class="fa-solid fa-bell generalface2" id="notif"></i>
+                  {% endif %}
+                </li>
+                
+                <li class="nav-item">
+                  <a class="nav-link" href="{{url_for('customerProfile')}}"><img src="/static/images/profile/customer/{{cus.cust_pic}}" alt="{{cus.cust_fname}}" width="25px" class="img rounded-circle"> {{cus.cust_fname}}</a>
+                </li>
+                {% elif session.get('designer') != None and des.desi_status=='actived': %}
+                {#<li class="nav-item">
+                  <a class="nav-link" href="#">Welcome! <img src="/static/images/profile/designer/{{des.desi_pic}}" alt="{{des.desi_fname}}" width="25px" class="img rounded-circle"> {{des.desi_fname}}</a>
+                </li>#}
+                <li class="nav-item">
+                  {% if noti|length > 0 %}
+                  <i class="fa-solid fa-bell nav-link generalface2" id="notif" style="display: block; position:relative"><sup class="supnoti">{{noti|length}}</sup></i>
+                  <div style="display:none; position:absolute; background-color:whitesmoke; padding:10px; margin:auto;" id="note">
+                    {% for nt in noti %}
+                    {% if des.desi_id %}
+                      {% if nt.notifypostobj or nt.notifylikeobj or nt.notifycomobj or nt.notifyshareobj or nt.notifybaobj or  nt.notifysubobj or nt.notifypayobj %}
+                        <span style="padding:2px; margin:auto;">
+                          {% if nt.notify_postid and nt.notify_desiid == des.desi_id %}
+                          <a href="/posti/{{nt.notifypostobj.post_id}}"><span id="com1" data-value="{{nt.notify_postid}}" style="padding:auto; margin:auto; text-align:left;" >You comment on your post</span></a>
+                          {% endif %}
+
+                          {% if nt.notify_postid %}
+                            {% if nt.notifydesiobj and nt.notify_desiid != des.desi_id %} 
+                            <a href="/posti/{{nt.notifypostobj.post_id}}" ><span id="com2" data-value="{{nt.notify_postid}}" style="padding:auto; margin:auto; text-align:left;" >{{ nt.notifydesiobj.desi_fname }} comment on your post</span></a>
+                            {% elif nt.notifycustobj %} 
+                            <a href="/posti/{{nt.notifypostobj.post_id}}"><span id="com3" data-value="{{nt.notify_postid}}" style="padding:auto; margin:auto; text-align:left;" id="posid3" value="{{nt.notify_postid}}">{{ nt.notifycustobj.cust_fname }} comment on your post</span></a>
+                            {% endif %} 
+                          {% endif %}
+
+                          {% if nt.notify_likeid and nt.notify_desiid==des.desi_id %}
+                          <a href="/postlike/{{nt.notifylikeobj.like_id}}"><span style="padding:auto; margin:auto; text-align:left;" id="{{nt.notify_likeid}}" value="{{nt.notify_likeid}}">You like your post</span></a>
+                          {% endif %}
+
+                          {% if nt.notify_likeid and nt.notify_desiid != des.desi_id %}
+                            {% if nt.notifydesiobj %}
+                            <a href="/postlike/{{nt.notifylikeobj.like_id}}"><span style="padding:auto; margin:auto; text-align:left;" id="{{nt.notify_likeid}}" value="{{nt.notify_likeid}}">{{ nt.notifydesiobj.desi_fname }} liked your post</span></a>
+                            {% elif nt.notifycustobj %}
+                            <a href="/postlike/{{nt.notifylikeobj.like_id}}"><span style="padding:auto; margin:auto; text-align:left;" id="{{nt.notify_likeid}}" value="{{nt.notify_likeid}}">{{ nt.notifycustobj.cust_fname }} liked your post</span></a>
+                            {% endif %} 
+                          {% endif %}
+
+                          {% if nt.notify_comid and nt.notify_desiid==des.desi_id %}
+                          <a href="/postreply/{{nt.notifycomobj.com_id}}" id="repcomi"><span style="padding:auto; margin:auto; text-align:left;" id="reep" data-value="{{nt.notify_comid}}">You reply to a comment in your post</span></a>
+                          {% endif %}
+
+                          {% if nt.notify_comid and nt.notify_desiid != des.desi_id %}
+                            {% if nt.notifydesiobj %}
+                            <a href="/postreply/{{nt.notifycomobj.com_id}}"><span style="padding:auto; margin:auto; text-align:left;" id="{{nt.notify_comid}}" value="{{nt.notify_comid}}">{{ nt.notifydesiobj.desi_fname }} reply to your comment</span></a>
+                            {% elif nt.notifycustobj %}
+                            <a href="/postreply/{{nt.notifycomobj.com_id}}"><span style="padding:auto; margin:auto; text-align:left;" id="{{nt.notify_comid}}" value="{{nt.notify_comid}}">{{ nt.notifycustobj.cust_fname }} reply to your comment</span></a>
+                            {% endif %} 
+                          {% endif %}
+                          
+                          {% if nt.notify_shareid and nt.notify_desiid==des.desi_id %}
+                          <a href="/postshare/{{nt.notifyshareobj.share_id}}"><span style="padding:auto; margin:auto; text-align:left;" id="{{nt.notify_shareid}}" value="{{nt.notify_shareid}}">You shared your post</span></a>
+                          {% endif %}
+
+                          {% if nt.notify_shareid and nt.notify_desiid != des.desi_id %}
+                            {% if nt.notifydesiobj %}
+                            <a href="/postshare/{{nt.notifyshareobj.share_id}}"><span style="padding:auto; margin:auto; text-align:left;" id="{{nt.notify_shareid}}" value="{{nt.notify_shareid}}">{{ nt.notifydesiobj.desi_fname }} shared your post</span></a>
+                            {% elif nt.notifycustobj %}
+                            <a href="/postshare/{{nt.notifyshareobj.share_id}}"><span style="padding:auto; margin:auto; text-align:left;" id="{{nt.notify_shareid}}" value="{{nt.notify_shareid}}">{{ nt.notifycustobj.cust_fname }} shared your post</span></a>
+                            {% endif %}
+                          {% endif %}
+
+                          {% if nt.notify_baid and nt.notify_desiid==des.desi_id %}
+                          <a href="/bookapp/{{nt.notifybaobj.ba_id}}/"><span style="padding:auto; margin:auto; text-align:left;" id="{{nt.notify_baid}}" value="{{nt.notify_baid}}">{{nt.notifybaobj.custbaobj.cust_fname}} sent you a booking appointment</span></a>
+                          {% endif %}
+
+                          {% if nt.notify_subid and nt.notify_desiid==des.desi_id and nt.notifysubobj.sub_status=="active" %}
+                          <a href="/notesub/{{nt.notifysubobj.sub_id}}/"><span style="padding:auto; margin:auto; text-align:left;" id="{{nt.notify_subid}}" value="{{nt.notify_subid}}">You have subscribed to a 
+                              {% if nt.notifysubobj.sub_plan=="600" %}
+                              monthly
+                              {% elif nt.notifysubobj.sub_plan=="1550" %}
+                              3 months
+                              {% elif nt.notifysubobj.sub_plan=="2700" %}
+                              6 month
+                              {% elif nt.notifysubobj.sub_plan=="4750" %}
+                              yearly
+                              {% endif %}
+                              plan</span></a>
+                          {% else %}
+                            {% if nt.notify_desiid==des.desi_id and nt.notifysubobj.sub_status=="deactive" %}
+                            <a href="/notesub/{{nt.notifysubobj.sub_id}}/"><span style="padding:auto; margin:auto; text-align:left;" id="{{nt.notify_subid}}" value="{{nt.notify_subid}}">Your subscribed plan has expired</span></a>
+                            {% endif %} 
+                          {% endif %}
+
+                          {% if nt.notify_paymentid and nt.notify_desiid==des.desi_id %}
+                            {% if nt.notifypayobj.payment_status == 'paid' %}
+                            <a href="/notepay/{{nt.notifypayobj.payment_id}}/"><span style="padding:auto; margin:auto; text-align:left;" id="{{nt.notify_paymentid}}" value="{{nt.notify_paymentid}}">Your payment is successful</span></a>
+                            {% elif nt.notifypayobj.payment_status == 'failed' or nt.notifypayobj.payment_status == 'pending' %}
+                            <a href="/notepay/{{nt.notifypayobj.payment_id}}/"><span style="padding:auto; margin:auto; text-align:left;" id="{{nt.notify_paymentid}}" value="{{nt.notify_paymentid}}">Your payment is unsuccessful</span></a>
+                            {% endif %}
+                          {% endif %}
+                        </span><br>
+                      {% endif %}
+                      {% endif %}
+                    {% endfor %}
+                  </div>
+                  {% else %}
+                  <i class="fa-solid fa-bell generalface2" id="notif" style="display:block; position:relative"></i>
+                  {% endif %}
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="{{url_for('designerProfile')}}"><img src="/static/images/profile/designer/{{des.desi_pic}}" alt="{{des.desi_fname}}" width="25px" class="img rounded-circle">{{des.desi_fname}}</a>
+                </li>
+                {% else %}
+                  {% if session.get('customer') != None %}
+                  <li class="nav-item">
+                    <a class="nav-link" href="{{url_for('unconfirmed')}}">Confirm Account</a>
+                  </li>
+                  {% elif session.get('designer') != None %}
+                    <li class="nav-item">
+                      <a class="nav-link" href="{{url_for('unconfirmed')}}">Confirm Account</a>
+                    </li>
+                  {% else %}
+                  <li class="nav-item">
+                    <a class="nav-link active" aria-current="page" href="{{url_for('home')}}">Home</a>
+                  </li>
+                    <li class="nav-item">
+                      <a class="nav-link" href="{{url_for('login')}}">Login</a>
+                    </li>
+                  {% endif %}
+                {% endif %}
+            </ul>
+          </div>
+        </div>
+      </nav>
+  </div>
+</div>  
+
+{% block content %}
+
+
+{% endblock %}
+
+    <!-- footer section -->
+  {% if not exclude_footer %}  
+  <div class="container-fluid" id="footer">
+    
+    <div class="row">
+      <div class="col-md-12">
+        <div class="row">
+
+          <div class="col-md-6 mt-3">
+            <div class="card" >
+              <div class="text-center" style="background-color: antiquewhite; height: 215px;">
+                <h6 class="card-title text-center text-dark">Subscribe to our Newsletter</h6>
+                <span id="output"></span>
+                <div class="card-body text-light text-center" style="color: #ffffff;">
+                  <form method="POST" action="{{url_for('newsletter')}}">
+                    <input type="hidden" name="csrf_token" value="{{csrf_token()}}">
+                    <input type="text" class="form-control mt-2 mb-2" id="newsname" name="name" placeholder="Fullname">
+                    <input type="email" class="form-control mt-2 mb-2" id="newsmail" name="email" placeholder="E-mail">
+                    <span class="btn btn-dark form-control mt-3 mb-2" id="newsbtn" >Subscribe Now</span>
+                  </form>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="col-md-3 mt-3">
+            <div class="card">
+              <div class="text-center clientback">
+                <h6 class="card-title text-center">Connect</h6>
+                <a href="#"><img src="{{url_for('static', filename='images/android-chrome-192x192.png')}}" class="rounded-circle text-center img-thumbnail" alt="client image" width="40%"></a>
+              </div>
+              <div class="card-body text-light text-center" style="background-color: black; color: #ffffff;">
+              
+              <span class="card-tex text-center fs-4 me-3"><a href="https://www.facebook.com/styleitafrica/" style="color: #ffffff !important;"><i class="fab fa-facebook"></i></a></span>
+              <span class="card-text text-center fs-4 me-3"><a href="https://www.twitter.com/styleitafrica/" style="color: #ffffff !important;"><i class="fab fa-twitter"></i></a></span>
+              <span class="card-text text-center fs-4 me-3"><a href="https://www.linkedin.com/company/styleit-africa/" style="color: #ffffff !important;"><i class="fab fa-linkedin"></i></a></span>
+              <span class="card-text text-center fs-4 me-3"><a href="https://www.instagram.com/styleitafrica/" style="color: #ffffff !important;"><i class="fab fa-instagram"></i></a></span>
+              </div>
+            </div>
+          </div>
+
+          <div class="col-md-3 mt-3">
+            <div class="card">
+              <div class=" clientback">
+                <h6 class="card-title text-center ">Quicklinks</h6>
+                <div class="d-flex justify-content">
+                  <span class="card-text ms-2 me-2 col-md-3" ><a href="#">Company</a></span>
+                  <span class="card-text ms-2 me-2 col-md-3"><a href="#">Resources</a></span>
+                  <span class="card-text ms-2 me-2 col-md-6"><a href="#">Privacy Policy</a></span>
+                </div>
+                <div class="d-flex justify-content">
+                  <span class="card-text ms-2 me-2 col-md-3"><a href="#">About us</a></span>
+                  <span class="card-text ms-2 me-2 col-md-3"><a href="#">Services</a></span>
+                  <span class="card-text ms-2 me-2 col-md-6"><a href="mailto:help@styleit.africa">Help</a></span> 
+                </div>
+                <div class="d-flex justify-content">
+                <span class="card-text ms-2 me-2 col-md-3"><a href="mailto:support@styleit.africa">Support</a></span>
+                <span class="card-text ms-2 me-2 col-md-3"><a href="mailto:contact@styleit.africa">Contact</a></span>
+                <span class="card-text ms-2 me-2 col-md-6"><a href="{{url_for('faq')}}">F.A.Q</a></span>
+                </div>
+                <div class="d-flex justify-content">
+                  <span class="card-text ms-2 me-2 col-md-3"><a href="#">Ads</a></span>
+                  <span class="card-text ms-2 me-2 col-md-3"><a href="#">Event</a></span>
+                  <span class="card-text ms-2 me-2 col-md-6"><a href="#">Career</a></span>
+                </div>
+              </div>
+              <div class="card-body text-center" style="height: 68px; background-color: black; color: #ffffff; font-size: 10px;">
+                <div class="d-flex justify-content-space-around">
+                  <span class="card-text ms-2 me-2 col-md-3"><a href="#" style=" color: #ffffff !important;">Report</a></span>
+                  <span class="card-text ms-2 me-2 col-md-3"><a href="#" style=" color: #ffffff !important;">Ban</a></span>
+                  <span class="card-text ms-2 me-2 col-md-3"><a href="#" style=" color: #ffffff !important;">Admin</a></span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          
+
+
+        </div>
+      </div>
+    </div>
+
+    <div class="row">
+        <div class="col-md-12 text-center generalface2 bg-danger p-2" style="font-size: 11px;">
+            <span>&copy; Styleit Africa Copyright 2023. All Right Reserved</span>
+        </div>
+    </div>
+  </div>
+  {% else %}
+
+  {% endif %}
+    
+    <footer>
+      <!-- jquery -->
+        <script src="{{url_for('static', filename='js/jquery-3.6.0.min.js')}}"></script>
+        <!-- bootstrap js bundle -->
+        <script type="text/javascript" src="{{url_for('static', filename='js/bootstrap.bundle.min.js')}}"></script>
+        <!-- share on js bundle -->
+        <script src="https://cdn.jsdelivr.net/npm/shareon@2/dist/shareon.iife.js" defer init></script>
+        <!-- socketio js bundle -->
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.5.4/socket.io.min.js"></script>
+
+        <!-- js script -->
+        <script type="text/javascript" charset="utf-8">
+          $(document).ready(function(){
+            $('#state').change(function(){
+                var stateid = $(this).val()
+                var csrf = "{{ csrf_token() }}"
+                data2send = {"stateid":stateid, "csrf_token":csrf}
+
+                ///make ajax call
+                $.ajax({
+                    url:"/load/lga/",
+                    data:data2send,
+                    type:'post',
+                    success:function(msg){
+                    $('#lga').html(msg)
+                    }
+                });
+            });
+    
+            //activating signup
+            $('#agree').click(function(){
+              var dis = $(this).prop('checked')
+              if(dis == false){
+                $('#btn').attr('disabled', 'disabled')
+              }else{
+                $('#btn').removeAttr('disabled')
+              }
+            });
+
+    
+            //switching profile picture 
+            $('#profiletoggler').click(function(){
+              $('#divbody').toggleClass('col-md-9')
+            });
+
+   
+            // share buttons
+            $('#facebook').click(function(){
+              $('#shareon').css("display", "none");
+              $('#share').css("display", "block");
+              var name="facebook";
+              var sharepost=$("#sharepost").val();
+              var user=$("#user").val();
+              var csrf = "{{ csrf_token() }}";
+              data2send = {"name":name, "csrf_token":csrf, "sharepost":sharepost, "user":user}
+              //Ajax call
+              $.ajax({
+                  url:"/share/",
+                  data:data2send,
+                  type:'POST',
+                  success:function(msg){
+                  console.log(msg);
+                  $('#share').load(location.href + " #share")
+                  }
+                });
+            });
+
+            $('#linkedin').click(function(){
+              $('#shareon').css("display", "none")
+              $('#share').css("display", "block")
+              var name="linkedin"
+              var sharepost=$("#sharepost").val();
+              var user=$("#user").val();
+              var csrf = "{{ csrf_token() }}";
+              data2send = {"name":name, "csrf_token":csrf, "sharepost":sharepost, "user":user}
+              //Ajax call
+              $.ajax({
+                  url:"/share/",
+                  data:data2send,
+                  type:'POST',
+                  success:function(msg){
+                  console.log(msg);
+                  $('#share').load(location.href + " #share")
+                  }
+                });
+            });
+
+            $('#telegram').click(function(){
+              $('#shareon').css("display", "none")
+              $('#share').css("display", "block")
+              var name="telegram"
+              var sharepost=$("#sharepost").val();
+              var user=$("#user").val();
+              var csrf = "{{ csrf_token() }}";
+              data2send = {"name":name, "csrf_token":csrf, "sharepost":sharepost, "user":user}
+              //Ajax call
+              $.ajax({
+                  url:"/share/",
+                  data:data2send,
+                  type:'POST',
+                  success:function(msg){
+                  console.log(msg);
+                  $('#share').load(location.href + " #share")
+                  }
+                });
+            });
+
+            $('#twitter').click(function(){
+              $('#shareon').css("display", "none")
+              $('#share').css("display", "block")
+              var name="twitter"
+              var sharepost=$("#sharepost").val();
+              var user=$("#user").val();
+              var csrf = "{{ csrf_token() }}";
+              data2send = {"name":name, "csrf_token":csrf, "sharepost":sharepost, "user":user}
+              //Ajax call
+              $.ajax({
+                  url:"/share/",
+                  data:data2send,
+                  type:'POST',
+                  success:function(msg){
+                  console.log(msg);
+                  $('#share').load(location.href + " #share")
+                  }
+                });
+            });
+     
+            //post trash by creator section
+            $('#trashit').click(function(){
+              var potid = $('#potid').val();
+              var csrf = "{{ csrf_token() }}";
+              data3send = {"postid":potid, "csrf_token":csrf}
+              $.ajax({
+                url:'/trashit/',
+                data:data3send,
+                type:'POST',
+                success:function(msg){
+                  console.log(msg);
+                  location.reload(true);
+                }
+              });
+            }); 
+     
+            //newsletter section
+            $('#newsbtn').click(function(){
+              var newsname=$('#newsname').val();
+              var newsmail=$('#newsmail').val();
+              var csrf="{{ csrf_token() }}";
+              data={"name":newsname, "email":newsmail, "csrf_token":csrf}
+              $.ajax({
+                url:'/newsletter/',
+                data:data,
+                type:"POST",
+                success:function(msg){
+                  console.log(msg)
+                  $('#output').html(msg)
+                }
+              });
+            });
+
+            $('#country').change(function(){
+              const countryid=$("#country").val();
+              var csrf="{{ csrf_token() }}";
+              data={"countryid":countryid, "csrf_token":csrf}
+              $.ajax({
+                url:'/countrycheck/',
+                data:data,
+                type:"POST",
+                success:function(msg){
+                  console.log(msg)
+                  if(msg=='Nigeria') {
+                    $('#nigblock').css("display", "block");
+                    $('#nonNigblock').css("display", "none");
+                  }else{
+                    if(msg !='Nigeria'){
+                      $('#nonNigblock').css("display", "block");
+                      $('#nigblock').css("display", "none");
+                    };
+                  };
+                }
+              });
+            });
+
+            $('#currency-input').change(function(){
+              const cunt=$('#currency-input').val();
+              const charge = cunt * 0.12;
+              const total = parseInt(cunt) + parseInt(charge);
+              $('#vat').html(charge);
+              $('#cha').val(charge);
+              $('#tot').html(total);
+            });
+
+          });
+
+
+//window scroll to load more post 
+var loading = false;
+
+$(window).scroll(function() {
+  if($(window).scrollTop() == $(document).height() - $(window).height()){
+    if (!loading) {
+      loading = true;
+      var page = $(this).data('page');
+      $.get('/trending?page=' + page, function(data) {
+      if(data.trim().length==0){
+        alert('No more data to load')
+      }else{
+        var posts = $(data).find('.post');
+        $('.post').append(posts);
+        };
+      });
+    }
+  };
+});
+
+
+
+//Javascript to change multiple divs
+function divchange(){
+  document.getElementById("Sameprofile").style.display='block';
+  document.getElementById("Samelike").style.display='none';
+  document.getElementById("Sameunlike").style.display='none';
+  document.getElementById("editprofile").style.display='none';
+  document.getElementById('task').style.display='none';
+  };
+function divchange2(){
+  document.getElementById("Sameprofile").style.display='none';
+  document.getElementById("Samelike").style.display='block';
+  document.getElementById("Sameunlike").style.display='none';
+  document.getElementById("editprofile").style.display='none';
+  document.getElementById('task').style.display='none';
+};
+function divchange3(){
+  document.getElementById("Sameprofile").style.display='none';
+  document.getElementById("Samelike").style.display='none';
+  document.getElementById("Sameunlike").style.display='block';
+  document.getElementById("editprofile").style.display='none';
+  document.getElementById('task').style.display='none';
+};
+function divchange4(){
+  document.getElementById("editprofile").style.display='block';
+  document.getElementById("Sameprofile").style.display='none';
+  document.getElementById("Samelike").style.display='none';
+  document.getElementById("Sameunlike").style.display='none';
+  document.getElementById('task').style.display='none';
+};            
+function divchange5(){
+  document.getElementById("Sameprofile").style.display='none';
+  document.getElementById("Samelike").style.display='none';
+  document.getElementById("Sameunlike").style.display='none';
+  document.getElementById("editprofile").style.display='none';
+  document.getElementById('task').style.display='block';
+};
+
+//reply function            
+function reply(id){
+  var rep=document.getElementById(id)
+  if(rep.style.display==='block'){
+    rep.style.display='none';
+  }else{
+    rep.style.display='block';
+  };
+};
+
+// designer delete display
+var dots = document.getElementById('3dot');
+var trashi = document.getElementById('trashi');
+var trashit = document.getElementById('trashit');
+if (trashit !==null){
+  trashi.addEventListener("click", function() {
+  dots.style.display = dots.style.display === 'none' ? 'block' : 'none';
+  });
+}
+   
+
+// share function
+function share(){
+  document.getElementById('shareon').style.display='block';
+  document.getElementById('share').style.display='none';
+};
+
+
+// notification toggle
+const noti=document.getElementById('notif');
+if (noti !==null){
+  noti.addEventListener('click', (event)=>{
+  var displayelement = document.getElementById('note');
+  if (displayelement.style.display==='none'){
+    displayelement.style.display='block';
+    var hideelement = document.getElementById('note');
+    if (hideelement){
+      hideelement.addEventListener('mouseleave', function(event){
+        noti.style.display='block';
+        displayelement.style.display='none';
+        });                  
+      };
+    }else{
+      displayelement.style.display='none';
+      document.getElementById('notif').style.display='block';
+    };
+  });
+};
+   
+
+//text complaint area
+const textarea1 = document.getElementById('textarea');
+if (textarea1 !== null){
+  textarea1.addEventListener('input', function(){
+  if (this.value.length > this.maxLength){
+    this.value = this.value.slice(0, this.maxLength);
+    }
+  });
+};
+   
+
+//currency digit validation
+const acno = document.getElementById('acno');
+if (acno !==null){
+  acno.addEventListener('input', function() {
+  if (this.value.length > this.maxLength) {
+    this.value = this.value.slice(0, this.maxLength);
+    }
+  });
+};
+
+
+</script>
+</footer>
+  <!-- footer ends -->
+</body>
+</html>

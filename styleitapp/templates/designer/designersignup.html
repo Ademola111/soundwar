@@ -1,0 +1,127 @@
+{% extends 'user/base.html' %}
+
+{% block title %}
+Styleit | Signup
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-md-3">
+            
+        </div>
+        <div class="col-md-6">
+            {% with m = get_flashed_messages(with_categories=true) %}
+                {% for c, i in m %}
+                    {% if c == 'success' %}
+                    <P class="alert alert-success fw-4">{{i}} </P>
+                    {% elif c == 'warning' %}
+                    <P class="alert alert-warning fw-4">{{i}} </P>
+                    {% else %}
+                    <P class="alert alert-danger fw-4">{{i}} </P>
+                    {% endif %}
+                {% endfor %} 
+            {% endwith %}
+            <form action="{{url_for('designerSignup')}}" method="POST" enctype="multipart/form-data">
+            <div class="row">
+                <div class="col-md-6">
+                    <input type="text" name="fname" placeholder="First Name" id="fname" class="form-control mt-3 mb-3" required>
+                </div>
+                <div class="col-md-6">
+                    <input type="text" name="lname" placeholder="Last Name" id="lname" class="form-control mt-3 mb-3" required>
+                </div>
+            </div>
+            <div class="row">
+                <div class="col-md-6">
+                    <input type="emal" name="email" placeholder="jude65@gmail.com" id="email" class="form-control mt-3 mb-3" required>
+                </div>
+                <div class="col-md-6">
+                    <input type="text" name="phone" placeholder="Phone Number" id="phone" class="form-control mt-3 mb-3" required>
+                </div>
+            </div>
+            <div class="row">
+                <div class="col-md-6">
+                    <input type="password" name="pwd" placeholder="Password" id="lname" class="form-control mt-3 mb-3" required>
+                </div>
+                <div class="col-md-6">
+                    <input type="password" name="cpwd" placeholder="Confirm Password" id="cpwd" class="form-control mt-3 mb-3" required>
+                </div>
+            </div>
+            <div class="row">
+                <div class="col-md-6">
+                    <input type="text" name="busname" placeholder="Business Name" id="busname" class="form-control mt-3 mb-3" required>
+                </div>
+                <div class="col-md-6">
+                    <input type="text" name="address" placeholder="Contact Address" id="address" class="form-control mt-3 mb-3" required>
+                </div>
+            </div>
+            <div class="row">
+                <div class="col-md-12 mt-3 mb-3">
+                    <select name="country" id="country" class="form-control" required>
+                        <option value="">Choose Country</option>
+                        {% for cn in natn %}
+                        <option value="{{cn.country_id}}">{{cn.country_name}}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+            <div class="row">
+                <div class="col-md-12" id="nigblock" style="display: none;">
+                    <div style=" display: flex; justify-content: space-between;">
+                        <div class="col-md-6 me-1">
+                            <select name="state" id="state" class="form-control mt-3 mb-3 ">
+                                <option value="">Choose State</option>
+                                {% for m in state %}
+                                <option value="{{m.state_id}}">{{m.state_name}}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <select class="form-control mt-3 mb-3" name="lga" id="lga">
+                                <option value="">Choose L.G.A</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="row">
+                <div class="col-md-12" id="nonNigblock" style="display: none;">
+                    <div style="display: flex; justify-content: space-between;">
+                        <div class="col-md-6 me-1">
+                            <input type="text" name="fstate" placeholder="Enter Your State" class="form-control mt-3 mb-3">
+                        </div>
+                        <div class="col-md-6">
+                            <input type="text" name="cities" placeholder="Enter Your Cities" class="form-control mt-3 mb-3">
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div>
+                <input type="radio" name="gender" value="male" id="male" class="form-check-input mt-3 mb-3" required>
+                <label for="male" class="form-check-label mt-2 mb-3" required>Male</label>
+                <input type="radio" name="gender" value="female" id="female" class="form-check-input mt-3 mb-3" required>
+                <label for="female" class="form-check-label mt-2 mb-3" required>Female</label>
+                
+            </div>
+            <div>
+                <input type="file" name="pic" id="pic" class="form-control mt-3 mb-3" required>
+            </div>
+            <div>
+                <input type="checkbox" name="agree" id="agree" class="form-check-input mt-3 mb-3" required>
+                <label for="agree" class="mt-2 mb-3" required>By checking the box on the left, you agreed to the website <a href="https://www.freeprivacypolicy.com/live/435b5730-da51-4c63-8fe1-6049488d9ba0" target="_blank" style="color: blue !important;">terms and conditions.</a></label>
+            </div>
+           <div>
+               <button type="submit" id="btn" class="btn btn-outline-danger mt-3 mb-3 form-control" disabled>Sign Up</button>
+               <input type="hidden" name="csrf_token" value="{{csrf_token()}}">
+            </div>
+           <span>Exiting user <a href="{{url_for('designerLogin')}}" class="btn btn-outline-success mt-3 mb-3"> Login</a> here</span>
+            </form>
+        </div>
+        <div class="col-md-3">
+
+        </div>
+    </div>
+</div>
+{% endblock %}

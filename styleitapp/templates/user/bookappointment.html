@@ -1,0 +1,61 @@
+{% extends "user/base.html" %}
+{% block title %}
+Styleit | Book Appointment
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-md-3"></div>
+        <div class="col-md-6">
+            <span>{% with m = get_flashed_messages(with_categories=true) %}
+                {% for c, i in m %}
+                    {% if c == 'success' %}
+                    <P class="alert alert-success fw-4">{{i}} </P>
+                    {% elif c == 'warning' %}
+                    <P class="alert alert-warning fw-4">{{i}} </P>
+                    {% else %}
+                    <P class="alert alert-danger fw-4">{{i}} </P>
+                    {% endif %}
+                {% endfor %} 
+            {% endwith %}</span>
+            <div class="text-center mt-3">
+                <h4>Book Apppointment</h4>
+            </div>
+            <div>
+                <form action="{{url_for('book_appointment')}}" method="post">
+                <span>Creator's Name </span>
+                <select name="dsignername" class="form-control mt-3 mb-3">
+                    {% for ap in apnt %}
+                    <option  id="{{ap.subdesiobj.desi_id}}" value="{{ap.subdesiobj.desi_id}}">{{ap.subdesiobj.desi_fname}} {{ap.subdesiobj.desi_lname}} - {{ap.subdesiobj.desi_businessName}}</option>
+                    {% endfor %}
+                </select>
+                <input type="hidden" name="csrf_token" value="{{csrf_token()}}">
+                <div class="row">
+                    <div class="col-md-6">
+                    <span>Booking Date</span>
+                    <input type="date" class="form-control mt-3 mb-3" id="bdate" name="bdate">
+                    </div>
+                    <div class="col-md-6">
+                    <span> Booking Time</span>
+                    <input type="time" class="form-control mt-3 mb-3" id="btime" name="btime">
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-md-6">
+                    <span> Collection Date</span>
+                    <input type="date" class="form-control mt-3 mb-3" id="cdate" name="cdate">
+                    </div>
+                    <div class="col-md-6">
+                    <span> Colection Time</span>
+                    <input type="time" class="form-control mt-3 mb-3" id="ctime" name="ctime">
+                    </div>
+                </div>
+                <button type="submit" class="form-control btn btn-danger mt-3 mb-3">Book Appointment</button>
+            </form>
+            </div>
+        </div>
+        <div class="col-md-3"></div>
+    </div>
+</div>
+{% endblock %}

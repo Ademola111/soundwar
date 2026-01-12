@@ -1,0 +1,49 @@
+{% extends 'admin/base.html' %}
+
+{% block title %}
+Styleit |otp
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class='row'>
+        <div class='col-md-12'>
+            {% with m = get_flashed_messages(with_categories=true) %}
+                {% for c, i in m %}
+                    {% if c == 'success' %}
+                        <P class="alert alert-success fw-4">{{i}} </P>
+                    {% elif c == 'warning' %}
+                        <P class="alert alert-warning fw-4">{{i}} </P>
+                    {% else %}
+                        <P class="alert alert-danger fw-4">{{i}} </P>
+                    {% endif %}
+                {% endfor %}
+            {% endwith %}
+        </div>
+    </div>
+    <div class="row">
+        <div class="col-md-6 text-center mt-3 mb-3">
+            <form action="{{url_for('finalizetransfer')}}" method="POST">
+                <input type='hidden' name="csrf_token" value="{{ csrf_token() }}">
+                <p>Enter the OTP code of this reference number {{transfercode}} sent to you. </p>
+                <!-- Input box for OTP -->
+                <input type="text" name='otp' id="otp-input" maxlength="6" pattern="\d{6}" class='form-control mt-3 mb-3' title="Enter a 6-digit OTP" required>
+
+                <!-- You can add more elements or styling as needed -->
+                <button type="submit" class=' btn btn-danger form-control mt-3 mb-3'>Submit</button>
+            </form>
+        </div>
+        <div class="col-md-6 text-center mt-3 mb-3">
+            <form action="{{url_for('verifytransfer')}}" method="POST">
+                <input type='hidden' name="csrf_token" value="{{ csrf_token() }}">
+                <p>Enter the Reference code to verify transfer status. </p>
+                <!-- Input box for OTP -->
+                <input type="text" name='otp' id="otp-input" maxlength="7" pattern="\d{7}" class='form-control mt-3 mb-3' title="Enter a 6-digit OTP" required>
+
+                <!-- You can add more elements or styling as needed -->
+                <button type="submit" class=' btn btn-danger form-control mt-3 mb-3'>Submit</button>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

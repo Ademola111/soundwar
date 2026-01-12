@@ -1,0 +1,64 @@
+{% extends 'user/base.html' %}
+{% block title %}
+Styleit | All designers
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="container">
+        <div class="row">
+            <div class="col-md-3"></div>
+            <div class="col-md-6">
+                <div class="row">
+                    {% for desi in design.items %}
+                    <div class="col-md-12 mt-3 mb-3" id="alldesigner">
+                        <div class="row">
+                            <div class="col-md-5"><a href="/designer/{{desi.subdesiobj.desi_id}}">
+                                <img src="/static/images/profile/designer/{{desi.subdesiobj.desi_pic}}" alt="{{desi.subdesiobj.desi_businessName}}" class="img-fluid" width="150">  
+                            </a></div>
+                            <div class="col-md-7 mt-3"><a href="/designer/{{desi.subdesiobj.desi_id}}">
+                                <p><b>{{desi.subdesiobj.desi_businessName}}</b></p>
+                                {% if desi.subdesiobj.stateobj2 %}
+                                    <p>{{desi.subdesiobj.stateobj2.state_name}}</p>
+                                {% else %}
+                                    <p>{{desi.subdesiobj.desi_state}}</p>
+                                {% endif %}
+                                {% if desi.subdesiobj.lgaobj2 %}
+                                <p>{{desi.subdesiobj.lgaobj2.lga_name}}</p>
+                                {% else %}                                    
+                                    <p>{{desi.subdesiobj.desi_city}}</p>
+                                {% endif %}
+                                <p>{{desi.subdesiobj.desicountry.country_name}}</p>
+
+                            </a></div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                    <!-- pagination links -->
+                    <div class="text-center mt-3">
+                        <a href="{{url_for('designers', page=design.prev_num)}}" class="btn btn-outline-primary {% if design.page ==  1 %} disabled {% endif %}">&laquo;</a>
+                        <!-- looping through the number of pages to display a link for each -->
+                        {% for page_num in design.iter_pages(left_edge=1, right_edge=1, left_current=1, right_current=2) %}
+
+                        {% if page_num %}
+                        <!-- check for active page and set the link to active -->
+                            {% if design.page == page_num %}
+                            <a href="{{url_for('designers', page=page_num)}}" class="btn btn-outline-dark">{{page_num}}</a>
+                            {% else %}
+                            <a href="{{url_for('designers', page=page_num)}}" class="btn btn-outline-dark">{{page_num}}</a>
+                            {% endif %}
+                        {% else %}
+                        ...
+                        {% endif %}
+                        {% endfor %}
+                        <a href="{{url_for('designers', page=design.next_num)}}" class="btn btn-outline-primary {% if design.page ==  design.pages %} disabled {% endif %}">&raquo;</a>
+                        <p class="text-right mt-3">Showing Page {{design.page}} of {{design.pages}}</p>
+                    </div>
+                    <!-- end pagination -->
+                </div>
+            </div>
+            <div class="col-md-3"></div>
+        </div>
+    </div>
+</div>
+{% endblock %}

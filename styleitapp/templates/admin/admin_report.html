@@ -1,0 +1,98 @@
+{% extends 'admin/base.html' %}
+
+{% block title %}
+Report | Styleit
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-md-4"></div>
+        <div class="col-md-4">
+            <div class="row">
+                <div class="col-md-9 mt-3 mb-3 generalface2" id="report">
+                    <div class="row">                
+                        <div class="col-md-12">
+                            {% for yo in srepo.items %}
+                            <div class="col-md-12 mt-3 mb-3" id="divdisplay">
+                                <div class="row">
+                                    <div class="col-md-3 mt-3">
+                                        {% if yo.report_custid %}
+                                            {% if yo.custreportobj %}                                
+                                            <img src="/static/images/profile/customer/{{yo.custreportobj.cust_pic}}" alt="{{yo.custreportobj.cust_fname}}" class="img-rounded-circle img-fluid">
+
+                                            {% elif yo.desireportobj %}
+                                            <img src="/static/images/profile/designer/{{yo.desireportobj.desi_pic}}" alt="{{yo.desireportobj.desi_fname}}" class="img-rounded-circle img-fluid">
+                                            {% endif %}
+                                        {% elif yo.report_desiid %}
+                                            {% if yo.custreportobj %}                                
+                                            <img src="/static/images/profile/customer/{{yo.custreportobj.cust_pic}}" alt="{{yo.custreportobj.cust_fname}}" class="img-rounded-circle img-fluid">
+
+                                            {% elif yo.desireportobj %}
+                                            <img src="/static/images/profile/designer/{{yo.desireportobj.desi_pic}}" alt="{{yo.desireportobj.desi_fname}}" class="img-rounded-circle img-fluid">
+                                            {% endif %}
+                                        {% endif %}
+                                    </div>
+                                    <div class="col-md-9 p-3">
+                                        <span>
+                                        {% if yo.report_custid %}
+                                            {% if yo.desireportobj %} 
+                                            <p style="font-size:12px;"> Business Name: {{yo.desireportobj.desi_businessName}}</p>
+                                            <p style="font-size:12px;"> Business Email: {{yo.desireportobj.desi_email}}</p>
+
+                                            {% elif yo.custreportobj %}
+                                            <p style="font-size:12px;"> Customer Name: {{yo.custreportobj.cust_lname}} {{yo.custreportobj.cust_fname}}
+                                            </p>
+                                            <p style="font-size:12px;"> Customer Email: {{yo.custreportobj.cust_email}}</p>
+                                            {% endif %}
+                                        {% elif yo.report_desiid %}
+                                            {% if yo.desireportobj %} 
+                                            <p style="font-size:12px;"> Business Name: {{yo.desireportobj.desi_businessName}}</p>
+                                            <p style="font-size:12px;"> Business Email: {{yo.desireportobj.desi_email}}</p>
+
+                                            {% elif yo.custreportobj %}
+                                            <p style="font-size:12px;"> Customer Name: {{yo.custreportobj.cust_lname}} {{yo.custreportobj.cust_fname}}
+                                            </p>
+                                            <p style="font-size:12px;"> Customer Email: {{yo.custreportobj.cust_email}}</p>
+                                            {% endif %}
+                                        {% endif %}
+                                            <p style="font-size:12px;">Reporter: {{yo.reporter}}</p>
+                                            <p style="font-size:12px;">Report Date: {{yo.report_date}}</p>
+                                            <p style="font-size:12px;">Report Issue: {{yo.report_reason}}</p>
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                            {% endfor %}
+
+                            <!-- pagination links -->
+                            <div class="text-center mt-3">
+                                <a href="{{url_for('admin_report', page=srepo.prev_num)}}" class="btn btn-outline-primary {% if srepo.page ==  1 %} disabled {% endif %}">&laquo;</a>
+                                <!-- looping through the number of pages to display a link for each -->
+                                {% for page_num in srepo.iter_pages(left_edge=1, right_edge=1, left_current=1, right_current=2) %}
+
+                                {% if page_num %}
+                                <!-- check for active page and set the link to active -->
+                                    {% if srepo.page == page_num %}
+                                    <a href="{{url_for('admin_report', page=page_num)}}" class="btn btn-outline-dark">{{page_num}}</a>
+                                    {% else %}
+                                    <a href="{{url_for('admin_report', page=page_num)}}" class="btn btn-outline-dark">{{page_num}}</a>
+                                    {% endif %}
+                                {% else %}
+                                ...
+                                {% endif %}
+                                {% endfor %}
+                                <a href="{{url_for('admin_report', page=srepo.next_num)}}" class="btn btn-outline-primary {% if srepo.page ==  srepo.pages %} disabled {% endif %}">&raquo;</a>
+                                <p class="text-right mt-3">Showing Page {{srepo.page}} of {{srepo.pages}}</p>
+                            </div>
+                            <!-- end pagination -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4"></div>
+        
+    </div>
+</div>
+{% endblock %}
