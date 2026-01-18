@@ -21,3 +21,19 @@ def revoked_token_callback(jwt_header, jwt_payload):
         }),
         401
     )
+
+
+@jwt.unauthorized_loader
+def custom_unauthorized_callback(err_str):
+    # Called when no JWT is sent
+    return jsonify({"message": "Unauthorized access"}), 401
+
+@jwt.invalid_token_loader
+def custom_invalid_token_callback(err_str):
+    # Called when JWT is invalid
+    return jsonify({"message": "Unauthorized access"}), 401
+
+@jwt.expired_token_loader
+def custom_expired_token_callback(jwt_header, jwt_payload):
+    # Called when JWT is expired
+    return jsonify({"message": "Unauthorized access"}), 401

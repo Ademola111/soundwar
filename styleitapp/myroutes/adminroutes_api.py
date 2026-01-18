@@ -32,22 +32,22 @@ def api_admin_home():
 
     # User is already logged in as admin
     if admin:
-        adm = Admin.query.get(admin) if admin else None
+        adm = db.session.get(Admin, admin) if admin else None
         return jsonify({'redirect': '/api/admin/dashboard/',
                         'admin': {
-                            'id': adm.admin_id,
-                            'firstname': adm.admin_fname,
-                            'lastname': adm.admin_lname
+                            'id': adm.admin_id if adm else None,
+                            'firstname': adm.admin_fname if adm else None,
+                            'lastname': adm.admin_lname if adm else None
                         }
                         })
     # User is already logged in as superadmin
     elif spadmin:
-        spa = Superadmin.query.get(spadmin) if spadmin else None
+        spa = db.session.get(Superadmin, spadmin) if spa else None
         return jsonify({'redirect': '/api/admin/dashboard/',
                         'superadmin': {
-                            'id': spa.spadmin_id,
-                            'firstname': spa.spadmin_fname,
-                            'lastname': spa.spadmin_lname
+                            'id': spa.spadmin_id if spa else None,
+                            'firstname': spa.spadmin_fname if spa else None,
+                            'lastname': spa.spadmin_lname if spa else None
                         }
                         })
     else:
@@ -129,14 +129,11 @@ def admin_login_api():
                                 }), 200
         else:
             if adm and adm.admin_status == 'deactive':
-                return jsonify({"message": "Your account has been deactivated."
-                " Please contact support."}), 403
+                return jsonify({"message": "Your account has been deactivated. Please contact support."}), 403
             elif spa and spa.spadmin_status == 'deactive':
-                return jsonify({"message": "Your account has been deactivated. "
-                "Please contact support."}), 403
+                return jsonify({"message": "Your account has been deactivated. Please contact support."}), 403
 
-            return jsonify({"message": "Invalid credentials. "
-            "Please check your email and password."}), 401
+            return jsonify({"message": "Invalid credentials."}), 401
     return jsonify({"message": "Method not allowed"}), 405
 
 
@@ -243,11 +240,13 @@ def api_dashboard():
     tpayn= sum(tp.tpay_amount for tp in total_transaction)
     payn = sum(pm.payment_amount for pm in pymt)
     total_revenue = tpayn + payn
+    
     active_time = db.session.query(
     case((Login.login_custid != None, Login.login_custid),
-    else_=Login.login_desiid).label("user_id"), func.sum(func.timestampdiff(text('SECOND'),
-    Login.login_date,func.coalesce(Login.logout_date, func.now())
-    )).label("total_active_seconds")).group_by("user_id").all()
+    else_=Login.login_desiid).label("user_id"), func.sum((
+            func.strftime('%s', func.coalesce(Login.logout_date, func.current_timestamp())) -
+            func.strftime('%s', Login.login_date)
+        )).label("total_active_seconds")).group_by("user_id").all()
 
     # Time-based data
     current_date = datetime.now()
@@ -260,7 +259,7 @@ def api_dashboard():
     year_end = datetime(current_date.year + 1, 1, 1)
 
     if admin:
-        adm = Admin.query.get(admin)
+        adm = db.session.get(Admin, admin)
         prof = adm  # Assuming you have serialize() method on your model
         day_data = Activitylog.query.filter(
             extract('day', Activitylog.date) == current_date.day,
@@ -354,7 +353,7 @@ def api_dashboard():
             "total_revenue": f"{total_revenue:,.2f}"
         })
     else:
-        spa = Superadmin.query.get(spadmin)
+        spa = db.session.get(Superadmin, spadmin)
         day_data = Activitylog.query.filter(
             extract('day', Activitylog.date) == current_date.day,
             Activitylog.spadminid == spa.spadmin_id).all()
@@ -462,8 +461,8 @@ def previous_day_api():
     else:
         admin = None
         spadmin = userid
-    adm = Admin.query.get(admin) if admin else None
-    spa = Superadmin.query.get(spadmin) if spadmin else None
+    adm = db.session.get(Admin, admin) if admin else None
+    spa = db.session.get(Superadmin, spadmin) if spadmin else None
     last_admin_active(userid, user_type)
     current_date = datetime.now()
     previous_day = current_date - timedelta(days=1)
@@ -474,7 +473,7 @@ def previous_day_api():
             extract('day', Activitylog.date) < extract('day', current_date),
             Activitylog.adminid == adm.admin_id
         ).all()
-        return jsonify({'count': len(previous_day_data)})
+        return jsonify({'count': previous_day_data if previous_day_data else 0}), 200
 
     elif spadmin:
         previous_day_data = db.session.query(Activitylog).filter(
@@ -482,7 +481,7 @@ def previous_day_api():
             extract('day', Activitylog.date) < extract('day', current_date),
             Activitylog.spadminid == spa.spadmin_id
         ).all()
-        return jsonify({'count': len(previous_day_data)})
+        return jsonify({'count': previous_day_data if previous_day_data else 0}), 200
 
     return jsonify({'error': 'Invalid user role'}), 400
 
@@ -502,8 +501,8 @@ def next_day_api():
     else:
         admin = None
         spadmin = userid
-    adm = Admin.query.get(admin) if admin else None
-    spa = Superadmin.query.get(spadmin) if spadmin else None
+    adm = db.session.get(Admin, admin) if admin else None
+    spa = db.session.get(Superadmin, spadmin) if spadmin else None
     last_admin_active(userid, user_type)
     current_date = datetime.now()
     next_day = current_date + timedelta(days=1)
@@ -544,8 +543,8 @@ def previous_week_api():
     else:
         admin = None
         spadmin = userid
-    adm = Admin.query.get(admin) if admin else None
-    spa = Superadmin.query.get(spadmin) if spadmin else None
+    adm = db.session.get(Admin, admin) if admin else None
+    spa = db.session.get(Superadmin, spadmin) if spadmin else None
     last_admin_active(userid, user_type)
     current_date = datetime.now()
     previous_week = current_date - timedelta(weeks=1)
@@ -589,7 +588,7 @@ def next_week_api():
     next_week_end = next_week_start + timedelta(days=7)
 
     if admin:
-        adm = Admin.query.get(admin)
+        adm = db.session.get(Admin, admin)
         next_week_data = db.session.query(Activitylog).filter(
             Activitylog.date >= next_week_start,
             Activitylog.date < next_week_end,
@@ -598,7 +597,7 @@ def next_week_api():
         return jsonify({"count": len(next_week_data)})
 
     elif spadmin:
-        spa = Superadmin.query.get(spadmin)
+        spa = db.session.get(Superadmin, spadmin)
         next_week_data = db.session.query(Activitylog).filter(
             Activitylog.date >= next_week_start,
             Activitylog.date < next_week_end,
@@ -629,14 +628,14 @@ def previous_month_api():
     previous_month = month_start - timedelta(days=1)
 
     if admin:
-        adm = Admin.query.get(admin)
+        adm = db.session.get(Admin, admin)
         previous_month_data = db.session.query(Activitylog).filter(
             Activitylog.date >= previous_month,
             Activitylog.date < month_start,
             Activitylog.adminid == adm.admin_id
         ).all()
     elif spadmin:
-        spa = Superadmin.query.get(spadmin)
+        spa = db.session.get(Superadmin, spadmin)
         previous_month_data = db.session.query(Activitylog).filter(
             Activitylog.date >= previous_month,
             Activitylog.date < month_start,
@@ -669,7 +668,7 @@ def next_month_api():
                  else month_start.replace(year=month_start.year + 1, month=1))
 
     if admin:
-        adm = Admin.query.get(admin)
+        adm = db.session.get(Admin, admin)
         next_month_data = db.session.query(Activitylog).filter(
             Activitylog.date >= month_start,
             Activitylog.date < month_end,
@@ -678,7 +677,7 @@ def next_month_api():
         return jsonify({'count': len(next_month_data)})
 
     elif spadmin:
-        spa = Superadmin.query.get(spadmin)
+        spa = db.session.get(Superadmin, spadmin)
         next_month_data = db.session.query(Activitylog).filter(
             Activitylog.date >= month_start,
             Activitylog.date < month_end,
@@ -707,14 +706,14 @@ def previous_year_api():
     previous_year = current_date.replace(year=current_date.year - 1)
 
     if admin:
-        adm = Admin.query.get(admin)
+        adm = db.session.get(Admin, admin)
         previous_year_data = db.session.query(Activitylog).filter(
             Activitylog.date >= previous_year,
             Activitylog.date < datetime(current_year, 1, 1),
             Activitylog.adminid == adm.admin_id
         ).all()
     elif spadmin:
-        spa = Superadmin.query.get(spadmin)
+        spa = db.session.get(Superadmin, spadmin)
         previous_year_data = db.session.query(Activitylog).filter(
             Activitylog.date >= previous_year,
             Activitylog.date < datetime(current_year, 1, 1),
@@ -749,14 +748,14 @@ def next_year_api():
     next_year_end = datetime(current_year + 2, 1, 1)
 
     if admin:
-        adm = Admin.query.get(admin)
+        adm = db.session.get(Admin, admin)
         previous_year_data = db.session.query(Activitylog).filter(
             Activitylog.date >= next_year_start,
             Activitylog.date < next_year_end,
             Activitylog.adminid == adm.admin_id
         ).all()
     elif spadmin:
-        spa = Superadmin.query.get(spadmin)
+        spa = db.session.get(Superadmin, spadmin)
         previous_year_data = db.session.query(Activitylog).filter(
             Activitylog.date >= next_year_start,
             Activitylog.date < next_year_end,
@@ -790,8 +789,8 @@ def api_admin_trending():
     results = []
 
     # Choose user context
-    adm = Admin.query.get(admin) if admin else None
-    spa = Superadmin.query.get(spadmin) if spadmin else None
+    adm = db.session.get(Admin, admin) if admin else None
+    spa = db.session.get(Superadmin, spadmin) if spadmin else None
 
     # Subqueries
     subq_likes = db.session.query(Like.like_postid, func.count(Like.like_id).label('like_count')) \
@@ -820,9 +819,9 @@ def api_admin_trending():
         share_count = db.session.query(func.count(Share.share_id)).filter(Share.share_postid == po.post_id).scalar()
 
         results.append({
-            "like_count": like_count,
-            "comment_count": comment_count,
-            "share_count": share_count,
+            "like_count": like_count if like_count else 0,
+            "comment_count": comment_count if comment_count else 0,
+            "share_count": share_count if share_count else 0,
             "postId":po.post_id, "postTitle":po.post_title,
             "content":po.post_body,
             "date":po.post_date, "postSuspend":po.post_suspend,
@@ -857,8 +856,8 @@ def api_admin_post(id):
         admin = None
         spadmin = userid
     last_admin_active(userid, user_type)
-    adm = Admin.query.get(admin) if admin else None
-    spa = Superadmin.query.get(spadmin) if spadmin else None
+    adm = db.session.get(Admin, admin) if admin else None
+    spa = db.session.get(Superadmin, spadmin) if spadmin else None
 
     # Fetch the post
     compost = Posting.query.filter_by(post_id=id).first()
@@ -877,7 +876,7 @@ def api_admin_post(id):
     # likes = Like.query.filter(Like.like_postid == compost.post_id).all()
 
     # Convert data to dictionaries (assumes you have to_dict() methods or serialize manually)
-    post_data = {"title":pstn.post_title, "body":pstn.post_body, "suspend":pstn.post_suspend,
+    post_data = {"id":pstn.post_id, "title":pstn.post_title, "body":pstn.post_body, "suspend":pstn.post_suspend,
          "delete":pstn.post_delete, "image":[{"imageName":img.image_name, "imageUrl":f"https://styleitafrica.pythonanywhere.com/static/images/postpic/{img.image_url}"}
                                              for img in pstn.imagepostobj],
          "creator":pstn.designerobj.desi_businessName, "date":pstn.post_date.isoformat(),
@@ -890,9 +889,9 @@ def api_admin_post(id):
                                          "parent":comment.parent_id, "post_id":comment.com_postid,
                                          "reply_date":comment.com_date} for comment in comnt]},
 
-    comment_count = {"Comment_Count": len(pstn.postcomobj)}
-    shares_count = {"shares_Count": len(pstn.sharepostobj)}
-    likes_count = {"likes_Count": len(pstn.likes)}
+    comment_count = {"Comment_Count": len(pstn.postcomobj) if pstn else 0}
+    shares_count = {"shares_Count": len(pstn.sharepostobj) if pstn else 0}
+    likes_count = {"likes_Count": len(pstn.likes) if pstn else 0}
 
     return jsonify({
         'post': post_data,
@@ -922,8 +921,8 @@ def ban_api():
         admin = None
         spadmin = userid
     last_admin_active(userid, user_type)
-    adm = Admin.query.get(admin) if admin else None
-    spa = Superadmin.query.get(spadmin) if spadmin else None
+    adm = db.session.get(Admin, admin) if admin else None
+    spa = db.session.get(Superadmin, spadmin) if spadmin else None
 
     data = request.get_json()
     postid = data.get('postid')
@@ -1074,7 +1073,7 @@ def api_admin_designers():
             'id':desi.desi_id, 'businessName': desi.desi_businessName,       # Assuming you have a desi_id linking to the designer
             'state': desi.stateobj2.state_name if desi.stateobj2.state_name else desi.desi_state,
             'lga':desi.lgaobj2.lga_name if desi.lgaobj2.lga_name else desi.desi_city,
-            "Country": desi.desicountry.country_name,
+            "Country": desi.desicountry.country_name if desi.desicountry else None,
             "profil_pic": f"https://styleitafrica.pythonanywhere.com/static/images/profile/designer/{desi.desi_pic}" if desi.desi_pic else None,
             'firstname': desi.desi_fname, 'lastname': desi.desi_lname, 'email': desi.desi_email,
             'status': desi.desi_status, 'access': desi.desi_access,
@@ -1125,7 +1124,7 @@ def api_admin_customers():
         'address': cus.cust_address, 'username':cus.cust_username,
         'gender': cus.cust_gender, 'registerDate': cus.cust_regdate,
         'profilePic': f"https://styleitafrica.pythonanywhere.com/static/images/profile/customer/{cus.cust_pic}" if cus.cust_pic else None, 'status': cus.cust_status,
-        'access': cus.cust_access, "country": cus.custcountry.country_name,
+        'access': cus.cust_access, "country": cus.custcountry.country_name if cus.custcountry else None,
         'state': cus.stateobj.state_name if cus.stateobj.state_name else cus.cust_state,
         'lga': cus.lgaobj.lga_name if cus.lgaobj.lga_name else cus.cust_city
     } for cus in customers.items]
@@ -1158,8 +1157,8 @@ def api_admin_desi_detail(id):
         admin = None
         spadmin = userid
     last_admin_active(userid, user_type)
-    adm = Admin.query.get(admin) if admin else None
-    spa = Superadmin.query.get(spadmin) if spadmin else None
+    adm = db.session.get(Admin, admin) if admin else None
+    spa = db.session.get(Superadmin, spadmin) if spadmin else None
     desi = Designer.query.filter(Designer.desi_id == id).first()
 
     if not desi:
@@ -1214,7 +1213,7 @@ def api_admin_desi_detail(id):
         'id':desi.desi_id, 'businessName': desi.desi_businessName,       # Assuming you have a desi_id linking to the designer
         'state': desi.stateobj2.state_name if desi.stateobj2.state_name else desi.desi_state,
         'lga':desi.lgaobj2.lga_name if desi.lgaobj2.lga_name else desi.desi_city,
-        "Country": desi.desicountry.country_name, 'address':desi.desi_address,
+        "Country": desi.desicountry.country_name if desi.desicountry else None, 'address':desi.desi_address,
         "profil_pic": f"https://styleitafrica.pythonanywhere.com/static/images/profile/designer/{desi.desi_pic}" if desi.desi_pic else None, 'access': desi.desi_access,
         'firstname': desi.desi_fname, 'lastname': desi.desi_lname, 'email': desi.desi_email,
         'status': desi.desi_status, 'phone_no': desi.desi_phone,
@@ -1280,8 +1279,8 @@ def api_admin_cust_detail(id):
         admin = None
         spadmin = userid
     last_admin_active(userid, user_type)
-    adm = Admin.query.get(admin) if admin else None
-    spa = Superadmin.query.get(spadmin) if spadmin else None
+    adm = db.session.get(Admin, admin) if admin else None
+    spa = db.session.get(Superadmin, spadmin) if spadmin else None
     cus = Customer.query.filter(Customer.cust_id == id).first()
 
     if not cus:
@@ -1312,7 +1311,7 @@ def api_admin_cust_detail(id):
         'address': cus.cust_address, 'username':cus.cust_username,
         'gender': cus.cust_gender, 'registerDate': cus.cust_regdate,
         'profilePic': f"https://styleitafrica.pythonanywhere.com/static/images/profile/customer/{cus.cust_pic}" if cus.cust_pic else None, 'status': cus.cust_status,
-        'access': cus.cust_access, "country": cus.custcountry.country_name,
+        'access': cus.cust_access, "country": cus.custcountry.country_name if cus.custcountry else None,
         'state': cus.stateobj.state_name if cus.stateobj.state_name else cus.cust_state,
         'lga': cus.lgaobj.lga_name if cus.lgaobj.lga_name else cus.cust_city,
         "total_report": total_reports,
@@ -1402,8 +1401,8 @@ def page_not_found_api(error):
             'auth': False
         }), 404
     else:
-        adm = Admin.query.get(admin)
-        spa = Superadmin.query.get(spadmin)
+        adm = db.session.get(Admin, admin)
+        spa = db.session.get(Superadmin, spadmin)
         return jsonify({
             'success': False,
             'error': 404,
@@ -1431,8 +1430,8 @@ def admin_search_api():
         admin = None
         spadmin = userid
     last_admin_active(userid, user_type)
-    adm = Admin.query.get(admin)
-    spa = Superadmin.query.get(spadmin)
+    adm = db.session.get(Admin, admin)
+    spa = db.session.get(Superadmin, spadmin)
 
     data = request.get_json()
     word = data.get('search', '')
@@ -1496,8 +1495,8 @@ def api_adminsearch_designer():
         admin = None
         spadmin = userid
     last_admin_active(userid, user_type)
-    adm = Admin.query.get(admin)
-    spa = Superadmin.query.get(spadmin)
+    adm = db.session.get(Admin, admin)
+    spa = db.session.get(Superadmin, spadmin)
 
     word=request.json.get('search')
     # print("This is word under search post", word)
@@ -1583,8 +1582,8 @@ def api_adminsearch_customer():
         admin = None
         spadmin = userid
     last_admin_active(userid, user_type)
-    adm = Admin.query.get(admin)
-    spa = Superadmin.query.get(spadmin)
+    adm = db.session.get(Admin, admin)
+    spa = db.session.get(Superadmin, spadmin)
 
     word=request.json.get('search')
     # print("This is word under search post", word)
@@ -1669,8 +1668,8 @@ def api_adminsearch_subscription():
         admin = None
         spadmin = userid
     last_admin_active(userid, user_type)
-    adm = Admin.query.get(admin)
-    spa = Superadmin.query.get(spadmin)
+    adm = db.session.get(Admin, admin)
+    spa = db.session.get(Superadmin, spadmin)
 
     word=request.json.get('search')
     # print("This is word under search post", word)
@@ -1757,8 +1756,8 @@ def api_adminsearch_bookappointment():
         admin = None
         spadmin = userid
     last_admin_active(userid, user_type)
-    adm = Admin.query.get(admin)
-    spa = Superadmin.query.get(spadmin)
+    adm = db.session.get(Admin, admin)
+    spa = db.session.get(Superadmin, spadmin)
 
     word=request.json.get('search')
     # print("This is word under search post", word)
@@ -1846,8 +1845,8 @@ def deactivat_api():
         admin = None
         spadmin = userid
     last_admin_active(userid, user_type)
-    adm = Admin.query.get(admin)
-    spa = Superadmin.query.get(spadmin)
+    adm = db.session.get(Admin, admin)
+    spa = db.session.get(Superadmin, spadmin)
 
     if request.method == "POST":
         # Get data from JSON body
@@ -1872,12 +1871,12 @@ def deactivat_api():
 
                         return jsonify({"message": "Designer deactivated", "status": "success",
                             "admin":adm.admin_id if adm else None,
-                            "spadmin":spa.spadmin_id if spa else None})
+                            "spadmin":spa.spadmin_id if spa else None}), 200
                     else:
                         return jsonify({"message": "Designer not found", "status": "error",
                             "admin":adm.admin_id if adm else None,
                             "spadmin":spa.spadmin_id if spa else None
-                            }), 404
+                            }), 400
             elif cust:
                 if cust != "":
                     cust = Customer.query.filter_by(cust_id=cust).first()
@@ -1894,12 +1893,12 @@ def deactivat_api():
                         return jsonify({"message": "Customer deactivated", "status": "success",
                             "admin":adm.admin_id if adm else None,
                             "spadmin":spa.spadmin_id if spa else None
-                        })
+                        }), 200
                     else:
                         return jsonify({"message": "Customer not found", "status": "error",
                             "admin":adm.admin_id if adm else None,
                             "spadmin":spa.spadmin_id if spa else None
-                        }), 404
+                        }), 400
         elif spa:
             if desi:
                 if desi != "":
@@ -1917,12 +1916,12 @@ def deactivat_api():
                         return jsonify({"message": "Designer deactivated", "status": "success",
                             "admin":adm.admin_id if adm else None,
                             "spadmin":spa.spadmin_id if spa else None
-                        })
+                        }), 200
                     else:
                         return jsonify({"message": "Designer not found", "status": "error",
                             "admin":adm.admin_id if adm else None,
                             "spadmin":spa.spadmin_id if spa else None
-                        }), 404
+                        }), 400
             elif cust:
                 if cust != "":
                     cust = Customer.query.filter_by(cust_id=cust).first()
@@ -1939,12 +1938,12 @@ def deactivat_api():
                         return jsonify({"message": "Customer deactivated", "status": "success",
                             "admin":adm.admin_id if adm else None,
                             "spadmin":spa.spadmin_id if spa else None
-                        })
+                        }), 200
                     else:
                         return jsonify({"message": "Customer not found", "status": "error",
                             "admin":adm.admin_id if adm else None,
                             "spadmin":spa.spadmin_id if spa else None
-                        }), 404
+                        }), 400
 
     return jsonify({"message": "Invalid request", "status": "error",
         "admin":adm.admin_id if adm else None,
@@ -1969,8 +1968,8 @@ def activat_api():
         admin = None
         spadmin = userid
     last_admin_active(userid, user_type)
-    adm = Admin.query.get(admin)
-    spa = Superadmin.query.get(spadmin)
+    adm = db.session.get(Admin, admin)
+    spa = db.session.get(Superadmin, spadmin)
 
     if request.method == "POST":
         url = request.url
@@ -2148,7 +2147,7 @@ def searchref_api():
             typmt=Transaction_payment.query.filter_by(tpay_transNo=nomba).first()
             if pymt == None and typmt==None:
                 message ={"message":f"This refno {nomba} is not available"}
-                return jsonify({"message":message})
+                return jsonify({"message":message}), 404
             else:
                 if pymt:
                     msg={"payment_id":pymt.payment_id, "payment_transNo":pymt.payment_transNo,
@@ -2160,24 +2159,24 @@ def searchref_api():
                     actlog = Activitylog(adminid=admin, link=url)
                     db.session.add(actlog)
                     db.session.commit()
-                    return jsonify({"payment":msg})
+                    return jsonify({"payment":msg}), 200
                 elif typmt:
                     msg={"tpay_id":typmt.tpay_id, "tpay_transNo":typmt.tpay_transNo,
                          "tpay_transdate":str(typmt.tpay_transdate), "tpay_amount":typmt.tpay_amount,
                          "tpay_status":typmt.tpay_status, "tpay_creatorId":typmt.tpay_desiid,
                          "tpay_clientId":typmt.tpay_custid, "tpay_book_appointmentId":typmt.tpay_baid,
                          "creator_businessName":typmt.desitpayobj.desi_businessName,
-                         "client_firstname":typmt.custtpayobj.cust_fname, "client_lastname":typmt.custtpayobj.cust_lname,
-                         "tpay_booking_status":typmt.tpaybaobj.ba_paystatus, "client_booking_status":typmt.tpaybaobj.ba_custstatus,
+                         "client_firstname":typmt.custtpayobj.cust_fname if typmt.custtpayobj else None, "client_lastname":typmt.custtpayobj.cust_lname if typmt.custtpayobj else None,
+                         "tpay_booking_status":typmt.tpaybaobj.ba_paystatus if typmt.tpaybaobj else None, "client_booking_status":typmt.tpaybaobj.ba_custstatus if typmt.tpaybaobj else None,
                          "tpay_currencyicon":typmt.tpay_currencyicon}
                     message=json.dumps(msg)
                     actlog = Activitylog(adminid=admin, link=url)
                     db.session.add(actlog)
                     db.session.commit()
-                    return jsonify({"payment":msg})
+                    return jsonify({"payment":msg}), 200
         else:
             message={"message":"your refno is incorrect"}
-            return jsonify({"message":message})
+            return jsonify({"message":message}), 400
 
     elif spadmin:
         nomba=request.json.get('searchref')
@@ -2186,7 +2185,7 @@ def searchref_api():
             typmt=Transaction_payment.query.filter_by(tpay_transNo=nomba).first()
             if pymt == None and typmt==None:
                 message ={"message":f"This refno {nomba} is not available"}
-                return jsonify({"message":message})
+                return jsonify({"message":message}), 404
             else:
                 if pymt:
                     msg={"payment_id":pymt.payment_id, "payment_transNo":pymt.payment_transNo,
@@ -2198,14 +2197,14 @@ def searchref_api():
                     actlog = Activitylog(spadminid=spadmin, link=url)
                     db.session.add(actlog)
                     db.session.commit()
-                    return jsonify({"payment":msg})
+                    return jsonify({"payment":msg}), 200
                 elif typmt:
                     msg={"tpay_id":typmt.tpay_id, "tpay_transNo":typmt.tpay_transNo,
                          "tpay_transdate":str(typmt.tpay_transdate), "tpay_amount":typmt.tpay_amount,
                          "tpay_status":typmt.tpay_status, "tpay_creatorId":typmt.tpay_desiid,
                          "tpay_clientId":typmt.tpay_custid, "tpay_book_appointmentId":typmt.tpay_baid,
                          "creator_businessName":typmt.desitpayobj.desi_businessName,
-                         "client_firstname":typmt.custtpayobj.cust_fname, "client_lastname":typmt.custtpayobj.cust_lname,
+                         "client_firstname":typmt.custtpayobj.cust_fname if typmt.custtpayobj else None, "client_lastname":typmt.custtpayobj.cust_lname if typmt.custtpayobj else None,
                          "tpay_booking_status":typmt.tpaybaobj.ba_paystatus, "client_booking_status":typmt.tpaybaobj.ba_custstatus,
                          "tpay_currencyicon":typmt.tpay_currencyicon}
                     message=json.dumps(msg)
@@ -2213,12 +2212,12 @@ def searchref_api():
                     actlog = Activitylog(spadminid=spadmin, link=url)
                     db.session.add(actlog)
                     db.session.commit()
-                    return jsonify({"payment":msg})
+                    return jsonify({"payment":msg}), 200
         else:
             message={"message":"your refno is incorrect"}
-            return jsonify({"message":message})
+            return jsonify({"message":message}), 404
     else:
-        return redirect('/api/adminhome')
+        return redirect('/api/adminhome'), 401
 
 
 """approve payment"""
@@ -2237,8 +2236,8 @@ def approve_payment_api(id):
         admin = None
         spadmin = userid
     last_admin_active(userid, user_type)
-    adm = Admin.query.get(admin) if admin else None
-    spa = Superadmin.query.get(spadmin) if spadmin else None
+    adm = db.session.get(Admin, admin) if admin else None
+    spa = db.session.get(Superadmin, spadmin) if spadmin else None
     linkurl = request.url
 
     typm = Transaction_payment.query.filter_by(tpay_transNo=id).first()
@@ -2378,10 +2377,10 @@ def send_fund_api():
 
     # Log activity
     if admin:
-        adm = Admin.query.get(admin)
+        adm = db.session.get(Admin, admin)
         actlog = Activitylog(adminid=adm.admin_id, link=linkurl)
     elif spadmin:
-        spa = Superadmin.query.get(spadmin)
+        spa = db.session.get(Superadmin, spadmin)
         actlog = Activitylog(spadminid=spa.spadmin_id, link=linkurl)
     else:
         return jsonify({"status": False, "message": "Unauthorized"}), 401
@@ -2418,8 +2417,8 @@ def finalizetransfer_api():
     else:
         admin = None
         spadmin = userid
-    adm = Admin.query.get(admin) if admin else None
-    spa = Superadmin.query.get(spadmin) if spadmin else None
+    adm = db.session.get(Admin, admin) if admin else None
+    spa = db.session.get(Superadmin, spadmin) if spadmin else None
     last_admin_active(userid, user_type)
     if request.method == 'GET':
         transfercode = session.get('transfer_code')
@@ -2453,13 +2452,13 @@ def finalizetransfer_api():
                 "message": "Transfer completed. Verify in 30 minutes.",
                 "status": "success",
                 "paystack_response": response.json()
-            })
+            }), 200
         else:
             return jsonify({
                 "message": "Failed to finalize transfer",
                 "status": "error",
                 "paystack_response": response.json()
-            }), response.status_code
+            }), 404
 
 
 @csrf.exempt
@@ -2478,8 +2477,8 @@ def verify_transfer_api():
         admin = None
         spadmin = userid
     last_admin_active(userid, user_type)
-    adm = Admin.query.get(admin) if admin else None
-    spa = Superadmin.query.get(spadmin) if spadmin else None
+    adm = db.session.get(Admin, admin) if admin else None
+    spa = db.session.get(Superadmin, spadmin) if spadmin else None
 
     data = request.get_json()
     code = data.get('otp')
@@ -2514,7 +2513,7 @@ def verify_transfer_api():
             "spadmin":spa.spadmin_id if spa else None
             # 'admin': adm.to_dict() if adm else None,
             # 'superadmin': spa.to_dict() if spa else None
-        }), 400
+        }), 404
 
 
 @csrf.exempt
@@ -2617,9 +2616,9 @@ def api_admin_alltrend():
         'lastName':po.designerobj.desi_lname,
         "email": po.designerobj.desi_email,
         "creator_pic": f"https://styleitafrica.pythonanywhere.com/static/images/profile/designer/{po.designerobj.desi_pic}" if po.designerobj.desi_pic else None,
-        "likes_Count": len(po.likes),
-        "Comment_Count":len(po.postcomobj),
-        "shares_Count":len(po.sharepostobj),
+        "likes_Count": len(po.likes if po.likes else 0),
+        "Comment_Count":len(po.postcomobj if po.postcomobj else 0),
+        "shares_Count":len(po.sharepostobj if po.sharepostobj else 0),
         "image":[{"postImage":img.image_name,
                     "postImageUrl":f"https://styleitafrica.pythonanywhere.com/static/images/postpic/{img.image_url}"} for img in po.imagepostobj],
         # "comments": [{'comment_id':com.com_id, 'comment_parentId': com.parent_id, 'body':com.com_body,
@@ -2706,8 +2705,8 @@ def api_admin_allpment():
         admin = None
         spadmin = userid
     last_admin_active(userid, user_type)
-    adm = Admin.query.get(admin) if admin else None
-    spa = Superadmin.query.get(spadmin) if spadmin else None
+    adm = db.session.get(Admin, admin) if admin else None
+    spa = db.session.get(Superadmin, spadmin) if spadmin else None
 
     page = request.args.get('page', 1, type=int)
     pymt_paginated = Payment.query.order_by(desc(Payment.payment_id)).paginate(page=page, per_page=rows_page)
@@ -2770,8 +2769,8 @@ def api_admin_subscription():
         admin = None
         spadmin = userid
     last_admin_active(userid, user_type)
-    adm = Admin.query.get(admin) if admin else None
-    spa = Superadmin.query.get(spadmin) if spadmin else None
+    adm = db.session.get(Admin, admin) if admin else None
+    spa = db.session.get(Superadmin, spadmin) if spadmin else None
 
     page = request.args.get('page', 1, type=int)
     sublist = Subscription.query.order_by(desc(Subscription.sub_date)).paginate(page=page, per_page=rows_per_page)
@@ -2834,8 +2833,8 @@ def api_admin_report():
         admin = None
         spadmin = userid
     last_admin_active(userid, user_type)
-    adm = Admin.query.get(admin)
-    spa = Superadmin.query.get(spadmin)
+    adm = db.session.get(Admin, admin)
+    spa = db.session.get(Superadmin, spadmin)
 
     page = request.args.get('page', 1, type=int)
     srepo_paginated = Report.query.order_by(desc(Report.report_id)).paginate(page=page, per_page=rows_per_page)
@@ -2884,7 +2883,7 @@ def admin_deactivate_api():
     if not spadmin or not usertype:
         return jsonify({'error': 'Unauthorized'}), 401
     last_admin_active(spadmin, usertype)
-    spa = Superadmin.query.get(spadmin)
+    spa = db.session.get(Superadmin, spadmin)
     data = request.get_json()
     admin_id = data.get('admin_id')
 
@@ -2927,7 +2926,7 @@ def api_staff_activity():
     if usertype not in ['superadmin'] or not spadmin:
         return jsonify({'error': 'Unauthorized'}), 401
     last_admin_active(spadmin, usertype)
-    spa = Superadmin.query.get(spadmin)
+    spa = db.session.get(Superadmin, spadmin)
 
     current_date = datetime.now()
     target_month = current_date.month

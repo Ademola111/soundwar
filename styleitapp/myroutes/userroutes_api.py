@@ -72,8 +72,8 @@ def apihome():
                 subdeactivate_signal.send(current_app, comment=su, post_author_email=commenter_email, recipients=recipients)
 
         # Prepare data for the response
-        des=Designer.query.get(desi_loggedin) if desi_loggedin else None
-        cus=Customer.query.get(logged_in) if logged_in else None
+        des=db.session.get(Designer, desi_loggedin) if desi_loggedin else None
+        cus=db.session.get(Customer, logged_in) if logged_in else None
 
         # Return JSON data instead of rendering a template
         return jsonify({
@@ -100,7 +100,7 @@ def login_api():
     designer = None
 
     if logged_in:
-        customer = Customer.query.get(logged_in)
+        customer = db.session.get(Customer, logged_in)
         if customer:
             customer_data = {
                 'id': customer.cust_id,
@@ -113,7 +113,7 @@ def login_api():
         customer_data = None
 
     if desi_loggedin:
-        designer = Designer.query.get(desi_loggedin)
+        designer = db.session.get(Designer, desi_loggedin)
         if designer:
             designer_data = {
                 'id': designer.desi_id,
@@ -167,8 +167,6 @@ def apicountrycheck():
 
 
 """Post section"""
-@limiter.limit(laps)
-@user_api_bp.route('/posts', methods=['GET'])
 def get_posts():
     today = datetime.now().date()
 
@@ -213,9 +211,9 @@ def trending_api():
     cus = None
     des = None
     if logged_in:
-        cus = Customer.query.get(logged_in)
+        cus = db.session.get(Customer, logged_in)
     if desi_loggedin:
-        des = Designer.query.get(desi_loggedin)
+        des = db.session.get(Designer, desi_loggedin)
 
     page = request.args.get('page', 1, type=int)
     per_page = request.args.get('per_page', 10, type=int)
@@ -292,8 +290,6 @@ def trending_api():
 
 
 """ comment tree building"""
-@limiter.limit(laps)
-@user_api_bp.route('/building_comment_tree/', methods=['GET'])
 def build_comment_tree(comments):
     comment_map = {}
     tree = []
@@ -364,8 +360,8 @@ def get_post_data(id):
         likes = Like.query.filter_by(like_postid=pstn.post_id).all()
 
         # Logged-in users
-        des = Designer.query.get(desi_loggedin) if desi_loggedin else None
-        cus = Customer.query.get(logged_in) if logged_in else None
+        des = db.session.get(Designer, desi_loggedin) if desi_loggedin else None
+        cus = db.session.get(Customer, logged_in) if logged_in else None
 
         # Notifications
         if desi_loggedin:
@@ -479,8 +475,8 @@ def notepost_api(id):
         logged_in = None
         desi_loggedin = userid
 
-    des = Designer.query.get(desi_loggedin)
-    cus = Customer.query.get(logged_in)
+    des = db.session.get(Designer, desi_loggedin)
+    cus = db.session.get(Customer, logged_in)
     last_active(userid, user_type)
     if desi_loggedin:
         notif = db.session.query(Notification).filter(Notification.notify_postid==id,
@@ -526,7 +522,7 @@ def notelike_api(id):
         desi_loggedin = userid
     last_active(userid, user_type)
     if desi_loggedin:
-        des = Designer.query.get(desi_loggedin)
+        des = db.session.get(Designer, desi_loggedin)
         if not des:
             return jsonify({'error': 'Designer not found'}), 404
 
@@ -541,7 +537,7 @@ def notelike_api(id):
         ).first()
 
     elif logged_in:
-        cus = Customer.query.get(logged_in)
+        cus = db.session.get(Customer, logged_in)
         if not cus:
             return jsonify({'error': 'Customer not found'}), 404
 
@@ -582,7 +578,7 @@ def apinotereply(id):
         desi_loggedin = userid
     last_active(userid, user_type)
     if desi_loggedin:
-        des=Designer.query.get(desi_loggedin)
+        des=db.session.get(Designer, desi_loggedin)
         if not des:
              return jsonify({'message': 'Designer not found'}), 404
         lk=Comment.query.filter(Comment.com_id==id, Comment.com_desiid==des.desi_id).first()
@@ -601,7 +597,7 @@ def apinotereply(id):
         return jsonify({'message': 'Notification updated', 'post_id': posid}), 200
 
     elif logged_in:
-        cus = Customer.query.get(logged_in)
+        cus = db.session.get(Customer, logged_in)
         if not cus:
             return jsonify({'message': 'Customer not found'}), 404
 
@@ -639,7 +635,7 @@ def noteshare_api(id):
         desi_loggedin = userid
     last_active(userid, user_type)
     if desi_loggedin:
-        des = Designer.query.get(desi_loggedin)
+        des = db.session.get(Designer, desi_loggedin)
         if not des:
             return jsonify({'error': 'Designer not found'}), 404
 
@@ -657,7 +653,7 @@ def noteshare_api(id):
         return jsonify({'redirect_url': f'/api/post/{posid}/'}), 200
 
     elif logged_in:
-        cus = Customer.query.get(logged_in)
+        cus = db.session.get(Customer, logged_in)
         if not cus:
             return jsonify({'error': 'Customer not found'}), 404
 
@@ -695,7 +691,7 @@ def notebookapp_api(id):
         desi_loggedin = userid
     last_active(userid, user_type)
     if logged_in:
-        cus = Customer.query.get(logged_in) # Use session value directly
+        cus = db.session.get(Customer, logged_in) # Use session value directly
         if not cus:
             return jsonify({'status': 'error', 'message': 'Customer not found'}), 404
 
@@ -711,7 +707,7 @@ def notebookapp_api(id):
         return jsonify({'status': 'success', 'message': 'Notification read'})
 
     elif desi_loggedin:
-        des = Designer.query.get(desi_loggedin) # Use session value directly
+        des = db.session.get(Designer, desi_loggedin) # Use session value directly
         if not des:
              return jsonify({'status': 'error', 'message': 'Designer not found'}), 404
 
@@ -739,10 +735,11 @@ def notesub_api(id):
     user_type, desi_loggedin = identity.split(':') if identity else (None, None)
     if user_type not in ['customer', 'designer'] or not desi_loggedin:
         return jsonify({'message': 'Unauthorized'}), 401  # Unauthorized
-    if user_type == 'designer':
-        des = Designer.query.get(desi_loggedin)
-        if not des:
-            return jsonify({'message': 'Designer not found'}), 404
+    if user_type != 'designer':
+        return jsonify({'message': 'Notification not found'}), 404
+    des = db.session.get(Designer, desi_loggedin)
+    if not des:
+        return jsonify({'message': 'Designer not found'}), 404
     last_active(desi_loggedin, user_type)
     notif = db.session.query(Notification).filter(
         Notification.notify_subid == id,
@@ -769,12 +766,15 @@ def notepay_api(id):
     user_type, desi_loggedin = identity.split(':') if identity else (None, None)
     if user_type not in ['customer', 'designer'] or not desi_loggedin:
         return jsonify({'message': 'Unauthorized'}), 401  # Unauthorized
-    if user_type == 'designer':
-        des = Designer.query.get(desi_loggedin)
+    if user_type != 'designer':
+        return jsonify({'message': 'Notification not found'}), 404
+    des = db.session.get(Designer, desi_loggedin)
+    if not des:
+        return jsonify({'message': 'Designer not found'}), 404
     last_active(desi_loggedin, user_type)
     notif = db.session.query(Notification).filter(
         Notification.notify_paymentid == id,
-        Notification.notify_desiid == des.desi_id,
+        Notification.notify_desiid == desi_loggedin,
         Notification.notify_read == 'unread'
     ).first()
 
@@ -797,26 +797,22 @@ def notetpay_api(id):
     user_type, logged_in = identity.split(':') if identity else (None, None)
     if user_type not in ['customer', 'designer'] or not logged_in:
         return jsonify({'message': 'Unauthorized'}), 401
+    if user_type != 'customer':
+        return jsonify({'message': 'Notification not found'}), 404
+    cus = db.session.get(Customer, logged_in)
+    if not cus:
+        return jsonify({'message': 'Customer not found'}), 404
     last_active(logged_in, user_type)
-    if user_type == 'customer':
-        cus = Customer.query.get(logged_in)
-        if not cus:
-            return jsonify({'message': 'Customer not found'}), 404
-
-    if logged_in:
-        notif = db.session.query(Notification).filter(
-            Notification.notify_tpayid == id,
-            Notification.notify_custid == cus.cust_id,
-            Notification.notify_read == 'unread'
-        ).first()
-        if notif:
-            notif.notify_read = 'read'
-            db.session.commit()
-            return jsonify({'message': 'Notification updated successfully'}), 200  # Return a JSON response
-        else:
-            return jsonify({'message': 'Notification not found'}), 404
-    else:
-        return jsonify({'message': 'Unauthorized'}), 401
+    notif = db.session.query(Notification).filter(
+        Notification.notify_tpayid == id,
+        Notification.notify_custid == logged_in,
+        Notification.notify_read == 'unread'
+    ).first()
+    if not notif:
+        return jsonify({'message': 'Notification not found'}), 404
+    notif.notify_read = 'read'
+    db.session.commit()
+    return jsonify({'message': 'Notification updated successfully'}), 200
 
 
 
@@ -845,7 +841,6 @@ def get_designers():
     for sub in design_pagination.items:
         # Fetch all ratings for this designer
         ratings = Rating.query.filter_by(rat_desiid=sub.subdesiobj.desi_id).all()
-
         total_ratings = len(ratings)
         avg_rating = round(sum(r.rat_rating for r in ratings) / total_ratings, 2) if total_ratings > 0 else None
 
@@ -908,7 +903,10 @@ def designer_detail_api(id):
     # rating4 = Rating.query.filter(Rating.rat_rating==4, Rating.rat_desiid==id).count()
     # rating5 = Rating.query.filter(Rating.rat_rating==5, Rating.rat_desiid==id).count()
     rating = Rating.query.filter(Rating.rat_desiid==id).all()
-    avg_rating = round(sum(r.rat_rating for r in rating) / len(rating), 2)
+    if rating:
+        avg_rating = round(sum(r.rat_rating for r in rating) / len(rating), 2)
+    else:
+        avg_rating = 0
     follow_count = Follow.query.filter_by(follow_desiid=id).count() #more efficient to count in the database
 
     is_following = False
@@ -981,7 +979,7 @@ def api_comment(postid):
 
 
     if desi_loggedin:
-        designer = Designer.query.get(desi_loggedin)
+        designer = db.session.get(Designer, desi_loggedin)
         if not designer:
             return jsonify({'message': 'Designer not found'}), 404
 
@@ -1003,7 +1001,7 @@ def api_comment(postid):
                         'comment_id': new_comment.com_id, "redirect_url": f'/api/post/{postid}/'}), 201
 
     elif logged_in:
-        customer = Customer.query.get(logged_in)
+        customer = db.session.get(Customer, logged_in)
         if not customer:
             return jsonify({'message': 'Customer not found'}), 404
 
@@ -1077,7 +1075,7 @@ def reply_api(postid, commentid):
         return jsonify({"status": "error", "message": "this field is required"}), 400  # Bad Request
 
     if desi_loggedin:
-        des = Designer.query.get(desi_loggedin)
+        des = db.session.get(Designer, desi_loggedin)
         comt = Comment.query.filter_by(com_body=repl, com_postid=postid,
                                          com_desiid=des.desi_id, parent_id=commentid).first()
         if comt is None:
@@ -1107,19 +1105,19 @@ def reply_api(postid, commentid):
             }), 409  # Conflict
 
     elif logged_in:
-        cus = Customer.query.get(logged_in)
+        cus = db.session.get(Customer, logged_in)
         comt = Comment.query.filter_by(com_body=repl, com_custid=cus.cust_id,
                                          com_postid=postid, parent_id=commentid).first()
         if comt is None:
             k = Comment(com_body=repl, com_postid=postid,
-                        com_custid=cus.cust_id, parent_id=commentid)
+                        com_custid=cus.cust_id, com_id=commentid)
             k.save()
             d = Notification(notify_custid=cus.cust_id,
                              notify_comid=commentid, notify_read='unread')
             d.save()
             # commenter = Comment.query.filter_by(com_postid=postid,
             # parent_id=k.parent_id).first() #This line is not used, so I commented it out
-            dso = Comment.query.filter_by(com_postid=postid, com_id=commentid).first()
+            dso = Comment.query.filter_by(com_postid=postid, parent_id=commentid).first()
             custom = dso.comdesiobj.desi_businessName  # Assuming this relationship exists
             recipients = {'custom': custom}
             commenter_email = dso.comdesiobj.desi_email  # Assuming this relationship exists
@@ -1467,9 +1465,11 @@ def user_verification_api():
     cus = None
     des = None
     vpic = request.files.get('pic')
+    if not vpic:
+        return jsonify({"status": "error", "message": "upload an image"}), 400
     original_pic = vpic.filename
     if logged_in:
-        cus = Customer.query.get(logged_in)
+        cus = db.session.get(Customer, logged_in)
         if original_pic:
             extension = os.path.splitext(original_pic)[1].lower()
             if extension in ['.jpg', '.gif', '.png']:
@@ -1481,7 +1481,7 @@ def user_verification_api():
                 db.session.commit()
 
     if desi_loggedin:
-        des = Designer.query.get(desi_loggedin)
+        des = db.session.get(Designer, desi_loggedin)
         if original_pic:
             extension = os.path.splitext(original_pic)[1].lower()
             if extension in ['.jpg', '.gif', '.png']:
@@ -1711,7 +1711,7 @@ def customer_profile():
     if user_type != 'customer':
         return jsonify({'message': 'Unauthorized access', 'status': 'error'}), 401
     last_active(logged_in, user_type)
-    cus = Customer.query.get(logged_in)
+    cus = db.session.get(Customer, logged_in)
     if cus.cust_status == 'deactived':
         return jsonify({'message': 'Please confirm your account', 'status': 'warning',
                         'redirect': '/api/unconfirmed'})
@@ -1805,7 +1805,7 @@ def customer_profile():
             return jsonify({'message': 'One or more fields are empty',
                             'status': 'warning'}), 400
 
-        upd = Customer.query.get(logged_in)
+        upd = db.session.get(Customer, logged_in)
         upd.cust_fname = fname
         upd.cust_lname = lname
         upd.cust_phone = phone
@@ -1843,7 +1843,7 @@ def update_customer_profilepic():
                 save_path = os.path.join(current_app.config['UPLOAD_FOLDER'], saveas)
                 pic.save(save_path)
 
-                cust = Customer.query.get(logged_in)
+                cust = db.session.get(Customer, logged_in)
                 cust.cust_pic = saveas
                 db.session.commit()
 
@@ -2100,7 +2100,7 @@ def designer_signup():
 #     desiloggedin = session.get('designer')
 #     desi_loggedin = get_jwt_identity()
 #     if desi_loggedin:
-#         g.des = Designer.query.get(desi_loggedin)
+#         g.des = db.session.get(Designer, desi_loggedin)
 #         if des:
 #             subt = db.session.query(Subscription).filter(
 #                 Subscription.sub_desiid == g.des.desi_id,
@@ -2372,7 +2372,7 @@ def designer_profile():
                 "clientlname":bk.custbaobj.cust_lname
             } for bk in getbk.items],
 
-            "subscription": [{"plan":f"{subt.sub_plan:,.2f}", "date":subt.sub_date,"startDate":subt.sub_startdate,
+            "subscription": [{"plan":"{:,.2f}".format(float(subt.sub_plan)), "date":subt.sub_date,"startDate":subt.sub_startdate,
             "endDate":subt.sub_enddate, "ref":subt.sub_ref,"status":subt.sub_status,
             "subpaystatus":subt.sub_paystatus}if subt else None],
             "notification": [{"noti_id":n.notify_id, "notice_update":n.notify_read,
@@ -2398,7 +2398,7 @@ def designer_profile():
             if not data.get(field):
                 return jsonify({'error': f'{field} is required'}), 400
 
-        des = Designer.query.get(desi_loggedin)
+        des = db.session.get(Designer, desi_loggedin)
         if not des:
             return jsonify({'error': 'Designer not found'}), 404
 
@@ -2430,7 +2430,7 @@ def update_description_bio():
         if not description:
             return jsonify({'error': 'Bio is required'}), 400
 
-        des = Designer.query.get(desi_loggedin)
+        des = db.session.get(Designer, desi_loggedin)
         if not des:
             return jsonify({'error': 'Designer not found'}), 404
 
@@ -2458,7 +2458,7 @@ def update_about():
         if not description:
             return jsonify({'error': 'The about field is required'}), 400
 
-        des = Designer.query.get(desi_loggedin)
+        des = db.session.get(Designer, desi_loggedin)
         if not des:
             return jsonify({'error': 'Designer not found'}), 404
 
@@ -2495,7 +2495,7 @@ def update_designer_profile_pic():
                 save_path = os.path.join(current_app.config['UPLOAD_FOLDER2'], saveas)
                 pic.save(save_path)
 
-                designer = Designer.query.get(desi_loggedin)
+                designer = db.session.get(Designer, desi_loggedin)
                 designer.desi_pic = saveas
                 db.session.commit()
 
@@ -2578,7 +2578,7 @@ def apiposting():
         return jsonify({'message': 'Unauthorized access'}), 403
     last_active(desi_loggedin, user_type)
     if request.method == 'POST':
-        designer = Designer.query.get(desi_loggedin)
+        designer = db.session.get(Designer, desi_loggedin)
         title = request.form.get('title')
         body = request.form.get('body')
         imgs = request.files.getlist('img')
@@ -2646,7 +2646,7 @@ def apiappointment_status(id):
     if not aptaction:
         return jsonify({'message': 'Action is required'}), 400
 
-    apptm = Bookappointment.query.get(id)
+    apptm = db.session.get(Bookappointment, id)
     if not apptm:
         return jsonify({'message': 'Appointment not found'}), 404
 
@@ -2696,7 +2696,7 @@ def apisubplan():
     if user_type != 'designer':
         return jsonify({'message': 'Unauthorized access'}), 403
     last_active(desi_loggedin, user_type)
-    designer = Designer.query.get(desi_loggedin)
+    designer = db.session.get(Designer, desi_loggedin)
     if not designer:
         return jsonify({'message': 'Designer not found'}), 404
 
@@ -2714,7 +2714,7 @@ def apisubplan():
         'designer': {'id': designer.desi_id, 'firstName': designer.desi_fname,
                      'lastName': designer.desi_lname, 'businessName': designer.desi_businessName},
         'subscriptions': [
-            {'id': sub.sub_id, 'date': sub.sub_date, 'plan': f"{sub.sub_plan:,.2f}",
+            {'id': sub.sub_id, 'date': sub.sub_date, 'plan': f"{float(sub.sub_plan):,.2f}",
              "startDate":sub.sub_startdate, "endDate":sub.sub_enddate,
              "status":sub.sub_status, "paymentStatus":sub.sub_paystatus, "refrence":sub.sub_ref}
             for sub in subscriptions.items
@@ -2849,7 +2849,7 @@ def apipayment():
     if not pymt:
         return jsonify({'message': 'Payment record not found'}), 404
 
-    designer = Designer.query.get(desi_loggedin)
+    designer = db.session.get(Designer, desi_loggedin)
     if not designer:
         return jsonify({'message': 'Designer not found'}), 404
 
@@ -3158,7 +3158,7 @@ def apicomplete_task(id):
     db.session.commit()
 
     # Update the appointment status
-    appointment = Bookappointment.query.get(id)
+    appointment = db.session.get(Bookappointment, id)
     if appointment:
         appointment.ba_status = lev
         db.session.commit()
@@ -3188,8 +3188,9 @@ def apiconfirm_delivery(id):
     if user_type != 'customer':
         return jsonify({'message': 'Unauthorized access'}), 403
     last_active(logged_in, user_type)
+
     if request.method == 'GET':
-        cus=Customer.query.get(logged_in)
+        cus=db.session.get(Customer, logged_in)
         jb=Job.query.filter(Job.jb_baid==id).first() if id else None
         return jsonify({
             'customer': cus.cust_name,
@@ -3207,7 +3208,7 @@ def apiconfirm_delivery(id):
             return jsonify({'message': 'One or more fields are empty'}), 400
 
         # Update appointment status
-        bk = Bookappointment.query.get(id)
+        bk = db.session.get(Bookappointment, id)
         if bk is None:
             return jsonify({'message': 'Appointment not found'}), 404
 
@@ -3246,7 +3247,7 @@ def apicustpayment(id):
     if user_type != 'customer':
         return jsonify({'message': 'Unauthorized access'}), 403
     last_active(logged_in, user_type)
-    cus = Customer.query.get(logged_in)
+    cus = db.session.get(Customer, logged_in)
     if cus is None:
         return jsonify({'message': 'Customer not found'}), 404
 
@@ -3322,8 +3323,8 @@ def apiconfirm_custpayment(id):
         return jsonify({'message': 'Unauthorized access'}), 403
     last_active(logged_in, user_type)
     # Retrieve customer and appointment
-    cus = Customer.query.get(logged_in)
-    bk = Bookappointment.query.get(id)
+    cus = db.session.get(Customer, logged_in)
+    bk = db.session.get(Bookappointment, id)
 
     if not cus or not bk:
         return jsonify({'message': 'Invalid request or session expired'}), 400
@@ -3418,8 +3419,8 @@ def page_not_found(error):
     #     desi_loggedin = None
 
     # Retrieve user details
-    # des = Designer.query.get(desi_loggedin) if desi_loggedin else None
-    # cus = Customer.query.get(logged_in) if logged_in else None
+    # des = db.session.get(Designer, desi_loggedin) if desi_loggedin else None
+    # cus = db.session.get(Customer, logged_in) if logged_in else None
 
     # Fetch notifications
     # noti = []
@@ -3485,9 +3486,9 @@ def search_results():
 
     # Perform search in Posting and Designer tables
     wordsearch = (Posting.query
-                .join(Designer, Posting.post_desiid == Designer.desi_id)
-                .join(State, Designer.desi_stateid == State.state_id)
-                .join(Lga, Designer.desi_lgaid == Lga.lga_id)
+                .outerjoin(Designer, Posting.post_desiid == Designer.desi_id)
+                .outerjoin(State, Designer.desi_stateid == State.state_id)
+                .outerjoin(Lga, Designer.desi_lgaid == Lga.lga_id)
                 .filter(or_(
                     Posting.post_title.ilike(pattern),
                     Posting.post_body.ilike(pattern),
@@ -3529,30 +3530,21 @@ def search_results():
         'lga': pot.designerobj.lgaobj2.lga_name if pot.designerobj and pot.designerobj.lgaobj2 else None,
         'state': pot.designerobj.stateobj2.state_name if pot.designerobj and pot.designerobj.stateobj2 else None
     } for pot in wordsearch.items]
-
-
-    if wordsearch.total==0:
-        return jsonify({
-            'message': 'Post not found',
-            'query': word,
-            'total_results': wordsearch.total,
-            'total_pages': wordsearch.pages,
-            'current_page': wordsearch.page,
-            'results': search_results,
-            'desi_loggedin': desi_loggedin if desi_loggedin else None,
-            'logged_in': logged_in if logged_in else None
-        }), 200
-    else:
-        return jsonify({
-            'message': 'Search completed successfully',
-            'query': word,
-            'total_results': wordsearch.total,
-            'total_pages': wordsearch.pages,
-            'current_page': wordsearch.page,
-            'results': search_results,
-            'desi_loggedin': desi_loggedin if desi_loggedin else None,
-            'logged_in': logged_in if logged_in else None
-        }), 200
+    message = (
+        'Search completed successfully'
+        if wordsearch.total > 0
+        else 'No posts matched your search'
+    )
+    return jsonify({
+        'message': message,
+        'query': word,
+        'total_results': wordsearch.total,
+        'total_pages': wordsearch.pages,
+        'current_page': wordsearch.page,
+        'results': search_results,
+        'desi_loggedin': desi_loggedin if desi_loggedin else None,
+        'logged_in': logged_in if logged_in else None
+    }), 200
 
 
 """Search section"""
