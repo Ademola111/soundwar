@@ -342,17 +342,33 @@ def get_post_data(id):
         desi_loggedin = userid
     last_active(userid, user_type)
     try:
+        page = request.args.get('page', 1, type=int)
+        per_page =10
         # Fetch post
         pstn = Posting.query.filter_by(post_id=id).first_or_404()
-
-        # Fetch comments (ordered by materialized path)
-        comnt = Comment.query\
-            .filter(Comment.com_postid == pstn.post_id)\
-            .order_by(Comment.path.asc())\
-            .all()
+        root_comments = Comment.query\
+            .filter(Comment.com_postid == pstn.post_id, 
+                    Comment.parent_id == None)\
+                        .order_by(Comment.com_date.desc())\
+                            .paginate(page=page, 
+                                      per_page=per_page,
+                                      error_out=False)
+        
+        root_ids = [c.com_id for c in root_comments.items]
+        
+        comnt = Comment.query.filter(
+            Comment.com_postid == pstn.post_id
+            ).order_by(Comment.path.asc()).all()
+                
+        # # Fetch comments (ordered by materialized path)
+        # comnt = Comment.query\
+        #     .filter(Comment.com_postid == pstn.post_id)\
+        #     .order_by(Comment.path.asc())\
+        #     .all()
 
         # Build nested comments
-        comments_tree = build_comment_tree(comnt)
+        paginate_tree = build_comment_tree(comnt)
+        comments_tree = [node for node in paginate_tree if node["com_id"] in root_ids]
         print("this is build nested comment", comments_tree)
 
         # Shares & Likes
@@ -404,17 +420,17 @@ def get_post_data(id):
                     ],
                     "creator": pstn.designerobj.desi_businessName,
                     "date": pstn.post_date.isoformat(),
-                    "post_comment": [
-                        {
-                            "com_body": com.com_body,
-                            "com_date": com.com_date.isoformat(),
-                            "com_suspend": com.com_suspend,
-                            "com_delete": com.com_delete,
-                            "client_com": com.comcustobj.cust_username if com.comcustobj else "",
-                            "creator_com": com.comdesiobj.desi_businessName if com.comdesiobj else ""
-                        }
-                        for com in pstn.postcomobj
-                    ]
+                    # "post_comment": [
+                    #     {
+                    #         "com_body": com.com_body,
+                    #         "com_date": com.com_date.isoformat(),
+                    #         "com_suspend": com.com_suspend,
+                    #         "com_delete": com.com_delete,
+                    #         "client_com": com.comcustobj.cust_username if com.comcustobj else "",
+                    #         "creator_com": com.comdesiobj.desi_businessName if com.comdesiobj else ""
+                    #     }
+                    #     for com in pstn.postcomobj
+                    # ]
                 },
 
                 #SAME KEY, NOW NESTED
@@ -448,7 +464,14 @@ def get_post_data(id):
             ]
         }
 
-        return jsonify({"post":post_data}), 200
+        return jsonify({"post":post_data,
+                        "page": root_comments.page,
+                        "per_page": root_comments.per_page,
+                        "total_pages": root_comments.pages,
+                        "total_items": root_comments.total,
+                        "has_next": root_comments.has_next,
+                        "has_prev": root_comments.has_prev
+                        }), 200
 
     except NotFound:
         return jsonify({"error": "Post not found"}), 404
@@ -1083,7 +1106,7 @@ def reply_api(postid, commentid):
             m.save()
             d = Notification(notify_desiid=des.desi_id, notify_comid=commentid, notify_read='unread')
             d.save()
-            # commenter = Comment.query.filter_by(com_postid=postid, parent_id=m.parent_id).first() #This line is not used, so I commented it out
+            commenter = Comment.query.filter_by(com_postid=postid, parent_id=m.parent_id).first() #This line is not used, so I commented it out
             dso = Comment.query.filter_by(com_postid=postid, com_id=commentid).first()
             custom = dso.comcustobj.cust_fname  # Assuming this relationship exists
             recipients = {'custom': custom}
@@ -1118,9 +1141,9 @@ def reply_api(postid, commentid):
             # commenter = Comment.query.filter_by(com_postid=postid,
             # parent_id=k.parent_id).first() #This line is not used, so I commented it out
             dso = Comment.query.filter_by(com_postid=postid, parent_id=commentid).first()
-            custom = dso.comdesiobj.desi_businessName  # Assuming this relationship exists
+            custom = dso.compostobj.designerobj.desi_businessName  # Assuming this relationship exists
             recipients = {'custom': custom}
-            commenter_email = dso.comdesiobj.desi_email  # Assuming this relationship exists
+            commenter_email = dso.compostobj.designerobj.desi_email  # Assuming this relationship exists
             reply_signal.send(current_app, comment=k,
                               post_author_email=commenter_email,
                               recipients=recipients) #I commented this because the signal import was missing and I couldn't test.

@@ -22,40 +22,56 @@ rows_page = 3
 """homepage"""
 @admin_api_bp.route('/api/adminhome/', methods=['GET'])
 def api_admin_home():
-    try:
-        verify_jwt_in_request(optional=True)
-    except Exception:
-        pass
-
-    admin = get_jwt_identity()
-    spadmin = get_jwt_identity()
+    verify_jwt_in_request(optional=True)
+    identity = get_jwt_identity()
+    
+    if not identity:
+        return jsonify({
+            "redirect": "/api/adminhome/",
+            "message": "Welcome. Please log in."
+        }), 200
+    
+    user_type, userid = identity.split(':') if identity else (None, None)
+    if user_type not in ['admin', 'superadmin'] or not userid:
+        return jsonify({'error': 'Unauthorized'}), 401
+    
+    if user_type == 'admin':
+        admin = userid
+        spadmin = None
+    else:
+        admin = None
+        spadmin = userid
 
     # User is already logged in as admin
     if admin:
-        adm = db.session.get(Admin, admin) if admin else None
+        adm = db.session.get(Admin, admin)
+        if not adm:
+            return jsonify({
+                "redirect": "/api/adminhome/"
+            }), 200
+        
         return jsonify({'redirect': '/api/admin/dashboard/',
                         'admin': {
                             'id': adm.admin_id if adm else None,
                             'firstname': adm.admin_fname if adm else None,
                             'lastname': adm.admin_lname if adm else None
                         }
-                        })
+                        }), 200
     # User is already logged in as superadmin
-    elif spadmin:
-        spa = db.session.get(Superadmin, spadmin) if spa else None
+    if spadmin:
+        spa = db.session.get(Superadmin, spadmin)
+        if not spa:
+            return jsonify({
+                "redirect": "/api/adminhome/"
+            }), 200
+        
         return jsonify({'redirect': '/api/admin/dashboard/',
                         'superadmin': {
                             'id': spa.spadmin_id if spa else None,
                             'firstname': spa.spadmin_fname if spa else None,
                             'lastname': spa.spadmin_lname if spa else None
                         }
-                        })
-    else:
-        return jsonify({
-            'status': 'unauthenticated',
-            'message': 'No valid admin session found.'
-        }), 401
-
+                        }), 200
 
 
 """login"""
@@ -72,7 +88,11 @@ def admin_login_api():
 
         # check credentials
         adm = db.session.query(Admin).filter(Admin.admin_email == email).first()
+        if not adm:
+            return jsonify({"message": "Invalid credentials"}), 401
         spa = db.session.query(Superadmin).filter(Superadmin.spadmin_email == email).first()
+        if not spa:
+            return jsonify({"message": "Invalid credentials"}), 401
         # print(f"spa is {spa}")
         if adm and adm.admin_status == 'active':
             if check_password_hash(adm.admin_pass, pwd):

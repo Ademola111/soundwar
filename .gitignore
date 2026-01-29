@@ -26,7 +26,7 @@ migrations/versions/641fde62bbeb_added_new_fields.py
 migrations/versions/f439ef740be1_added_user_table.py
 home ui-ux.png
 git
-tests/test_adminroutes_api.py
+
 ADMIN_TEST_SUITE_DOCUMENTATION.md
 
 
