@@ -88,6 +88,7 @@ class Comment(db.Model):
     def level(self):
         return len(self.path)//self._N - 1
 
+db.Index('idx_post_path', Comment.com_postid, Comment.path)
 
 """Customer model"""
 class Customer(db.Model):

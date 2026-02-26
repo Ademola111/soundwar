@@ -2828,7 +2828,7 @@ class ApiBuildCommentTreeTestCase(BaseApiTestCase):
             tree = build_comment_tree(comments)
             self.assertIsInstance(tree, list)
             self.assertGreater(len(tree), 0)
-            self.assertEqual(tree[0]['replies'], 'Test comment')
+            self.assertEqual(tree[0]['body'], 'Test comment')
 
     def test_build_comment_tree_nested_comments(self):
         """Test building comment tree with parent-child comments"""
@@ -2873,7 +2873,7 @@ class ApiBuildCommentTreeTestCase(BaseApiTestCase):
             self.assertIsInstance(tree, list)
             if tree:
                 node = tree[0]
-                required_fields = ['com_id', 'replies', 'parent', 'post_id', 'children']
+                required_fields = ['com_id', 'body', 'parent', 'post_id', 'children']
                 for field in required_fields:
                     self.assertIn(field, node)
 
@@ -3940,7 +3940,7 @@ class ApiDesignerSubplanTestCase(BaseApiTestCase):
         self.assertIn('designer', data)
         self.assertIn('subscriptions', data)
         self.assertIn('pagination', data)
-        self.assertIn('notifications', data)
+        self.assertIn('notification', data)
         self.assertEqual(data['designer']['id'], 1)
         self.assertEqual(data['designer']['businessName'], 'TestDesigner')
         self.assertTrue(len(data['subscriptions']) > 0)
@@ -3996,7 +3996,7 @@ class ApiDesignerSubscribeTestCase(BaseApiTestCase):
         self.assertEqual(response.status_code, 201)
         data = response.get_json()
         self.assertIn('message', data)
-        self.assertEqual(data['message'], 'Subscription successful')
+        self.assertEqual(data['message'], 'Subscription initiated successfully')
         self.assertIn('subscription', data)
         self.assertIn('payment', data)
 
@@ -4256,12 +4256,11 @@ class ApiActivateTestCase(BaseApiTestCase):
     def make_tokens(self, ref='123456', user_identity='designer:1'):
         payment_token = create_access_token(identity=str(ref), expires_delta=timedelta(minutes=5))
         user_token = create_access_token(identity=user_identity)
-        headers = {'Authorization': f'Bearer {user_token}'}
-        return payment_token, headers
+        return payment_token, user_token
 
     def call_activate(self, ref='123456', user_identity='designer:1'):
-        payment_token, headers = self.make_tokens(ref, user_identity)
-        return self.client.get(f'/api/activate?jwt={payment_token}', headers=headers)
+        payment_token, user_token = self.make_tokens(ref, user_identity)
+        return self.client.get(f'/api/activate?jwt={payment_token}&access_token={user_token}')
 
     # --------- TESTS ---------
 

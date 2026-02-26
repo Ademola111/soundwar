@@ -161,12 +161,22 @@ def admin_login_api():
 @csrf.exempt
 @admin_api_bp.route('/api/admin/forgottenpassword', methods=['POST'])
 def api_admin_forgotten_password():
-    admin = session.get('admin')
-    spadmin = session.get('superadmin')
-    if admin or spadmin:
-        return jsonify({'status': 'redirect',
-                        'message': 'Already logged in', 'redirect_url': '/api/admin/dashboard/'}), 403
-
+    try:
+        identity = verify_jwt_in_request()
+        user_type, userid = identity.split(':') if identity else (None, None)
+        if user_type == 'admin':
+            admin = userid
+            spadmin = None
+            return jsonify({'status':'success', 'redirect_url': '/api/admin/dashboard/', 'adminid': admin,
+                        'message': 'Already logged in'}), 200
+        else:
+            admin = None
+            spadmin = userid
+            return jsonify({'status':'success', 'redirect_url': '/api/admin/dashboard/', 'spadminid': spadmin,
+                        'message': 'Already logged in'}), 200
+    except Exception:
+        pass
+    
     data = request.json
     username = data.get('username')
     email = data.get('email')
@@ -191,6 +201,7 @@ def api_admin_forgotten_password():
         elif cust.admin_secretword == username:
             cust.admin_pass = hashed_pwd
             db.session.commit()
+            last_admin_active(cust.admin_id, 'admin')
             return jsonify({'status': 'success', 'message': 'Password updated successfully'}), 200
 
     elif spa:
@@ -201,6 +212,7 @@ def api_admin_forgotten_password():
         elif spa.spadmin_secretword == username:
             spa.spadmin_pass = hashed_pwd
             db.session.commit()
+            last_admin_active(spa.spadmin_id, 'superadmin')
             return jsonify({'status': 'success', 'message': 'Password updated successfully'}), 200
 
     return jsonify({'status': 'error', 'message': 'Invalid email address or secret word'}), 404
@@ -897,17 +909,16 @@ def api_admin_post(id):
 
     # Convert data to dictionaries (assumes you have to_dict() methods or serialize manually)
     post_data = {"id":pstn.post_id, "title":pstn.post_title, "body":pstn.post_body, "suspend":pstn.post_suspend,
-         "delete":pstn.post_delete, "image":[{"imageName":img.image_name, "imageUrl":f"https://styleitafrica.pythonanywhere.com/static/images/postpic/{img.image_url}"}
-                                             for img in pstn.imagepostobj],
+         "delete":pstn.post_delete, 
+         "image":[{"imageName":img.image_name, "imageUrl":f"https://styleitafrica.pythonanywhere.com/static/images/postpic/{img.image_url}"} for img in pstn.imagepostobj],
          "creator":pstn.designerobj.desi_businessName, "date":pstn.post_date.isoformat(),
          "post_comment":[
              {"com_body":com.com_body, "com_date":com.com_date.isoformat(), "com_suspend": com.com_suspend,
               "com_delete":com.com_delete, "client_com": com.comcustobj.cust_username if com.comcustobj else"",
               "creator_com": com.comdesiobj.desi_businessName if com.comdesiobj else "" }
-              for com in pstn.postcomobj]} if pstn else None,
-    comments_data = {'comments_reply': [{"replies":comment.com_body, "replies_id":comment.com_id,
-                                         "parent":comment.parent_id, "post_id":comment.com_postid,
-                                         "reply_date":comment.com_date} for comment in comnt]},
+              for com in pstn.postcomobj]} if pstn else None
+    
+    comments_data = {'comments_reply': [{"replies":comment.com_body, "replies_id":comment.com_id, "parent":comment.parent_id, "post_id":comment.com_postid, "reply_date":comment.com_date.isoformat()} for comment in comnt]} if comnt else None
 
     comment_count = {"Comment_Count": len(pstn.postcomobj) if pstn else 0}
     shares_count = {"shares_Count": len(pstn.sharepostobj) if pstn else 0}

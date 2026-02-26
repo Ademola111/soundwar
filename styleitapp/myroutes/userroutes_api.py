@@ -3,7 +3,7 @@ from datetime import datetime, date, timedelta, timezone
 from urllib.parse import quote_plus, unquote_plus
 from sqlalchemy import desc, func, or_
 from flask import Blueprint, current_app, request, redirect, session, jsonify, url_for
-from flask_jwt_extended import create_refresh_token, jwt_required, get_jwt_identity, create_access_token, verify_jwt_in_request, get_jwt
+from flask_jwt_extended import create_refresh_token, decode_token, jwt_required, get_jwt_identity, create_access_token, verify_jwt_in_request, get_jwt
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 from werkzeug.exceptions import NotFound
@@ -248,6 +248,9 @@ def trending_api():
 
     posts = [
         {
+            'notification':[{'noti_postid':nt.notify_postid if nt.notify_postid else None,
+                             'noti_message':nt.notify_read if nt.notify_read else None,
+                             'noti_clientid':nt.notify_custid if nt.notify_custid else None, 'noti_likeid':nt.notify_likeid if nt.notify_likeid else None, 'noti_commentid':nt.notify_comid if nt.notify_comid else None, 'noti_shareid':nt.notify_shareid if nt.notify_shareid else None, 'noti_bookappointmentid':nt.notify_baid if nt.notify_baid else None, 'noti_transaction_paymentid':nt.notify_tpayid if nt.notify_tpayid else None, 'noti_transaction_payment_status':nt.notifytpayobj.tpay_status if nt.notifytpayobj else None, 'noti_creatorid':nt.notify_desiid if nt.notify_desiid else None, 'noti_creator_firstname':nt.notifydesiobj.desi_fname if nt.notifydesiobj else None, 'noti_client_firstname':nt.notifycustobj.cust_fname if nt.notifycustobj else None, 'noti_subscriptionid':nt.notify_subid if nt.notify_subid else None, 'noti_subplan':nt.notifysubobj.sub_plan if nt.notifysubobj else None, 'noti_sub_status':nt.notifysubobj.sub_status if nt.notifysubobj else None, 'noti_paymentid':nt.notify_paymentid if nt.notify_paymentid else None, 'noti_payment_status':nt.notifypayobj.payment_status if nt.notifypayobj else None } for nt in noti],
             'follows': [{'follow_id':f.follow_id if f.follow_id else None, 'followed_desiid':f.follow_desiid if f.follow_desiid else None,
                     'follower_custid':f.follow_custid if f.follow_custid else None} for f in (follow or [])],
             "id": posti.post_id,
@@ -298,14 +301,21 @@ def build_comment_tree(comments):
     for com in comments:
         comment_map[com.com_id] = {
             "com_id": com.com_id,
-            "replies": com.com_body,
+            "body": com.com_body,
             "replies_id": com.com_id,
             "parent": com.parent_id,
+            'path': com.path,
             "post_id": com.com_postid,
             "reply_date": com.com_date.isoformat(),
             "level": com.path.count(".") if com.path else None,  # nesting level
-            "client_com": com.comcustobj.cust_username if com.comcustobj else "",
-            "creator_com": com.comdesiobj.desi_businessName if com.comdesiobj else "",
+            # "client_com": com.comcustobj.cust_username if com.comcustobj else "",
+            # "creator_com": com.comdesiobj.desi_businessName if com.comdesiobj else "",
+            'client_username': com.comcustobj.cust_username if com.comcustobj and com.comcustobj.cust_username else '',
+            'client_pic': f"https://styleitafrica.pythonanywhere.com/static/images/profile/customer/{com.comcustobj.cust_pic}" if com.comcustobj and com.comcustobj.cust_pic else None,
+            'client_id': com.comcustobj.cust_id if com.comcustobj and com.comcustobj.cust_id else '',
+            'creator_businessname': com.comdesiobj.desi_businessName if com.comdesiobj and com.comdesiobj.desi_businessName else '',
+            'creator_id': com.comdesiobj.desi_id if com.comdesiobj and com.comdesiobj.desi_id else '',
+            'creator_pic': f"https://styleitafrica.pythonanywhere.com/static/images/profile/designer/{com.comdesiobj.desi_pic}" if com.comdesiobj and com.comdesiobj.desi_pic else None,
             "children": []
         }
 
@@ -320,6 +330,17 @@ def build_comment_tree(comments):
         print("this is tree output",tree)
     return tree
 
+
+def sort_tree_desc(nodes):
+    """
+    Sorts comments and their children by date DESC
+    WITHOUT breaking parent-child relationships
+    """
+    nodes.sort(key=lambda x: x["reply_date"], reverse=True)
+    for node in nodes:
+        if node["children"]:
+            sort_tree_desc(node["children"])
+            
 
 """ post detail session """
 @limiter.limit(laps)
@@ -348,18 +369,33 @@ def get_post_data(id):
         pstn = Posting.query.filter_by(post_id=id).first_or_404()
         root_comments = Comment.query\
             .filter(Comment.com_postid == pstn.post_id, 
-                    Comment.parent_id == None)\
+                    Comment.parent_id.is_(None))\
                         .order_by(Comment.com_date.desc())\
                             .paginate(page=page, 
                                       per_page=per_page,
                                       error_out=False)
         
         root_ids = [c.com_id for c in root_comments.items]
-        
+
+        """newly added code to fetch all comments with paths starting with root paths"""
+        # root_ids = [c.path for c in root_comments.items]
+       
+        # conditions = [print("this is root path", root_path) for root_path in root_ids]
+
+        # conditions = [Comment.path.startswith(root_path) for root_path in root_ids]
+        # print("this is conditions", conditions)
+        # comnt = Comment.query.filter(
+        #     Comment.com_postid == pstn.post_id, or_(*conditions)
+        #     ).order_by(Comment.path.asc()).all()
         comnt = Comment.query.filter(
             Comment.com_postid == pstn.post_id
             ).order_by(Comment.path.asc()).all()
-                
+
+        # comnti = Comment.query.filter(Comment.com_postid == pstn.post_id)
+        # if conditions:
+        #     comnt = comnti.filter(or_(*conditions))
+        # comnt = comnti.order_by(Comment.path.asc()).all()
+        
         # # Fetch comments (ordered by materialized path)
         # comnt = Comment.query\
         #     .filter(Comment.com_postid == pstn.post_id)\
@@ -371,6 +407,8 @@ def get_post_data(id):
         comments_tree = [node for node in paginate_tree if node["com_id"] in root_ids]
         print("this is build nested comment", comments_tree)
 
+        sort_tree_desc(comments_tree)
+
         # Shares & Likes
         share = Share.query.filter_by(share_postid=pstn.post_id).all()
         likes = Like.query.filter_by(like_postid=pstn.post_id).all()
@@ -378,7 +416,10 @@ def get_post_data(id):
         # Logged-in users
         des = db.session.get(Designer, desi_loggedin) if desi_loggedin else None
         cus = db.session.get(Customer, logged_in) if logged_in else None
-
+        if cus:
+            follow = Follow.query.filter_by(follow_custid=cus.cust_id).all()
+        else:
+            follow = []
         # Notifications
         if desi_loggedin:
             noti = Notification.query.filter(
@@ -411,6 +452,7 @@ def get_post_data(id):
                     "body": pstn.post_body,
                     "suspend": pstn.post_suspend,
                     "delete": pstn.post_delete,
+                    "creator_pic": f"https://styleitafrica.pythonanywhere.com/static/images/profile/designer/{pstn.designerobj.desi_pic}" if pstn.designerobj.desi_pic else None,
                     "image": [
                         {
                             "imageName": img.image_name,
@@ -418,7 +460,13 @@ def get_post_data(id):
                         }
                         for img in pstn.imagepostobj
                     ],
+                    'id':pstn.post_id,
+                    'follows': [{'follow_id':f.follow_id if f.follow_id else None, 'followed_desiid':f.follow_desiid if f.follow_desiid else None,
+                    'follower_custid':f.follow_custid if f.follow_custid else None} for f in (follow or [])],
+                    "client_id_likes": [lke.like_custid if lke.like_custid else None for lke in pstn.likes],
+                    "creator_id_likes": [lke.like_desiid if lke.like_desiid else None for lke in pstn.likes],
                     "creator": pstn.designerobj.desi_businessName,
+                    "creator_id": pstn.designerobj.desi_id,
                     "date": pstn.post_date.isoformat(),
                     # "post_comment": [
                     #     {
@@ -446,22 +494,9 @@ def get_post_data(id):
                 'customer': cus.cust_id if cus else None
             },
 
-            'notifications': [
-                {
-                    "detail": n.notify_read,
-                    "postid": n.notify_postid,
-                    "creator": n.notify_desiid,
-                    "client": n.notify_custid,
-                    "likeid": n.notify_likeid,
-                    "comment": n.notify_comid,
-                    "share": n.notify_shareid,
-                    "bookappointment": n.notify_baid,
-                    "subscription": n.notify_subid,
-                    "payment": n.notify_paymentid,
-                    "transcation": n.notify_tpayid
-                }
-                for n in noti
-            ]
+            'notification':[{'noti_postid':nt.notify_postid if nt.notify_postid else None,
+                             'noti_message':nt.notify_read if nt.notify_read else None,
+                             'noti_clientid':nt.notify_custid if nt.notify_custid else None, 'noti_likeid':nt.notify_likeid if nt.notify_likeid else None, 'noti_commentid':nt.notify_comid if nt.notify_comid else None, 'noti_shareid':nt.notify_shareid if nt.notify_shareid else None, 'noti_bookappointmentid':nt.notify_baid if nt.notify_baid else None, 'noti_transaction_paymentid':nt.notify_tpayid if nt.notify_tpayid else None, 'noti_transaction_payment_status':nt.notifytpayobj.tpay_status if nt.notifytpayobj else None, 'noti_creatorid':nt.notify_desiid if nt.notify_desiid else None, 'noti_creator_firstname':nt.notifydesiobj.desi_fname if nt.notifydesiobj else None, 'noti_client_firstname':nt.notifycustobj.cust_fname if nt.notifycustobj else None, 'noti_subscriptionid':nt.notify_subid if nt.notify_subid else None, 'noti_subplan':nt.notifysubobj.sub_plan if nt.notifysubobj else None, 'noti_sub_status':nt.notifysubobj.sub_status if nt.notifysubobj else None, 'noti_paymentid':nt.notify_paymentid if nt.notify_paymentid else None, 'noti_payment_status':nt.notifypayobj.payment_status if nt.notifypayobj else None } for nt in noti],
         }
 
         return jsonify({"post":post_data,
@@ -872,6 +907,8 @@ def get_designers():
             "creator_id": sub.subdesiobj.desi_id,
             "fname": sub.subdesiobj.desi_fname,
             "lname": sub.subdesiobj.desi_lname,
+            "bio": sub.subdesiobj.desi_bio,
+            "desi_about":sub.subdesiobj.desi_about,
             "creator": sub.subdesiobj.desi_businessName,
             "state": sub.subdesiobj.stateobj2.state_name
                     if sub.subdesiobj.stateobj2.state_name else sub.subdesiobj.desi_state,
@@ -1805,15 +1842,14 @@ def customer_profile():
                 "creatorLname":bk.desibaobj.desi_lname if bk.desibaobj and bk.desibaobj.desi_lname else None
             } for bk in getbk.items],
 
-            'notifications': [{'id':n.notify_id, 'status':n.notify_read, "notifier": (
-                n.notifydesiobj.desi_businessName
-                if n.notifydesiobj and n.notifydesiobj.desi_businessName
-                else n.notifycustobj.cust_username if n.notifycustobj else None
-                )} for n in noti],
+            'notification':[{'noti_postid':nt.notify_postid if nt.notify_postid else None,
+                             'noti_message':nt.notify_read if nt.notify_read else None,
+                             'noti_clientid':nt.notify_custid if nt.notify_custid else None, 'noti_likeid':nt.notify_likeid if nt.notify_likeid else None, 'noti_commentid':nt.notify_comid if nt.notify_comid else None, 'noti_shareid':nt.notify_shareid if nt.notify_shareid else None, 'noti_bookappointmentid':nt.notify_baid if nt.notify_baid else None, 'noti_transaction_paymentid':nt.notify_tpayid if nt.notify_tpayid else None, 'noti_transaction_payment_status':nt.notifytpayobj.tpay_status if nt.notifytpayobj else None, 'noti_creatorid':nt.notify_desiid if nt.notify_desiid else None, 'noti_creator_firstname':nt.notifydesiobj.desi_fname if nt.notifydesiobj else None, 'noti_client_firstname':nt.notifycustobj.cust_fname if nt.notifycustobj else None, 'noti_subscriptionid':nt.notify_subid if nt.notify_subid else None, 'noti_subplan':nt.notifysubobj.sub_plan if nt.notifysubobj else None, 'noti_sub_status':nt.notifysubobj.sub_status if nt.notifysubobj else None, 'noti_paymentid':nt.notify_paymentid if nt.notify_paymentid else None, 'noti_payment_status':nt.notifypayobj.payment_status if nt.notifypayobj else None } for nt in noti],
 
             'follows': [{'id':f.follow_id, 'follow_desiid':f.follow_desiid,
                          'follow_custid':f.follow_custid} for f in follow],
-            'total_following': len(follow)
+            'total_following': len(follow),
+            'total_notification':len(noti)
         })
 
     if request.method == 'PUT':
@@ -2398,10 +2434,9 @@ def designer_profile():
             "subscription": [{"plan":"{:,.2f}".format(float(subt.sub_plan)), "date":subt.sub_date,"startDate":subt.sub_startdate,
             "endDate":subt.sub_enddate, "ref":subt.sub_ref,"status":subt.sub_status,
             "subpaystatus":subt.sub_paystatus}if subt else None],
-            "notification": [{"noti_id":n.notify_id, "notice_update":n.notify_read,
-            "notifier": (n.notifydesiobj.desi_businessName if n.notifydesiobj and n.notifydesiobj.desi_businessName else n.notifycustobj.cust_username if n.notifycustobj else None
-            )} for n in noti],
-
+            'notification':[{'noti_postid':nt.notify_postid if nt.notify_postid else None,
+                             'noti_message':nt.notify_read if nt.notify_read else None,
+                             'noti_clientid':nt.notify_custid if nt.notify_custid else None, 'noti_likeid':nt.notify_likeid if nt.notify_likeid else None, 'noti_commentid':nt.notify_comid if nt.notify_comid else None, 'noti_shareid':nt.notify_shareid if nt.notify_shareid else None, 'noti_bookappointmentid':nt.notify_baid if nt.notify_baid else None, 'noti_transaction_paymentid':nt.notify_tpayid if nt.notify_tpayid else None, 'noti_transaction_payment_status':nt.notifytpayobj.tpay_status if nt.notifytpayobj else None, 'noti_creatorid':nt.notify_desiid if nt.notify_desiid else None, 'noti_creator_firstname':nt.notifydesiobj.desi_fname if nt.notifydesiobj else None, 'noti_client_firstname':nt.notifycustobj.cust_fname if nt.notifycustobj else None, 'noti_subscriptionid':nt.notify_subid if nt.notify_subid else None, 'noti_subplan':nt.notifysubobj.sub_plan if nt.notifysubobj else None, 'noti_sub_status':nt.notifysubobj.sub_status if nt.notifysubobj else None, 'noti_paymentid':nt.notify_paymentid if nt.notify_paymentid else None, 'noti_payment_status':nt.notifypayobj.payment_status if nt.notifypayobj else None } for nt in noti],
             "jobs": [{"jobPic":f"https://styleitafrica.pythonanywhere.com/static/images/completed_task/{pt.jb_pic}" if pt.jb_pic else None, "clientFirstName":pt.jbcustobj.cust_fname if pt.jbcustobj else None,
             "clientLastName":pt.jbcustobj.cust_lname if pt.jbcustobj else None, "date":pt.jb_date if pt else None,"status":pt.jb_status.title() if pt else None, } for pt in jb.items],
             "bank": [{"accountName":bnk.bnk_acname, "accountNo":bnk.bnk_acno, "bankName":bnk.bnk_bankname}if bnk else None],
@@ -2411,7 +2446,8 @@ def designer_profile():
                         "follow_client": ff.custfollowobj.cust_username if ff.custfollowobj else None
                         }
                         for ff in follow],
-            "follow_count": len(follow)
+            "follow_count": len(follow),
+            "total_notification": len(noti)
         }), 200
 
     if request.method == 'PUT':
@@ -2730,7 +2766,7 @@ def apisubplan():
                                       .order_by(desc(Subscription.sub_date)) \
                                       .paginate(page=page, per_page=per_page, error_out=False)
 
-    notifications = Notification.query.filter_by(notify_read='unread',
+    noti = Notification.query.filter_by(notify_read='unread',
                                                   notify_desiid=designer.desi_id).all()
 
     return jsonify({
@@ -2750,11 +2786,9 @@ def apisubplan():
             'per_page': per_page,
             'page':page
         },
-        'notifications': [{'id': n.notify_id, 'message': n.notify_read, "notifier": (
-                n.notifydesiobj.desi_businessName
-                if n.notifydesiobj and n.notifydesiobj.desi_businessName
-                else n.notifycustobj.cust_username if n.notifycustobj else None
-                )} for n in notifications]
+        'notification':[{'noti_postid':nt.notify_postid if nt.notify_postid else None,
+                             'noti_message':nt.notify_read if nt.notify_read else None,
+                             'noti_clientid':nt.notify_custid if nt.notify_custid else None, 'noti_likeid':nt.notify_likeid if nt.notify_likeid else None, 'noti_commentid':nt.notify_comid if nt.notify_comid else None, 'noti_shareid':nt.notify_shareid if nt.notify_shareid else None, 'noti_bookappointmentid':nt.notify_baid if nt.notify_baid else None, 'noti_transaction_paymentid':nt.notify_tpayid if nt.notify_tpayid else None, 'noti_transaction_payment_status':nt.notifytpayobj.tpay_status if nt.notifytpayobj else None, 'noti_creatorid':nt.notify_desiid if nt.notify_desiid else None, 'noti_creator_firstname':nt.notifydesiobj.desi_fname if nt.notifydesiobj else None, 'noti_client_firstname':nt.notifycustobj.cust_fname if nt.notifycustobj else None, 'noti_subscriptionid':nt.notify_subid if nt.notify_subid else None, 'noti_subplan':nt.notifysubobj.sub_plan if nt.notifysubobj else None, 'noti_sub_status':nt.notifysubobj.sub_status if nt.notifysubobj else None, 'noti_paymentid':nt.notify_paymentid if nt.notify_paymentid else None, 'noti_payment_status':nt.notifypayobj.payment_status if nt.notifypayobj else None } for nt in noti]
     }), 200
 
 
@@ -2776,7 +2810,9 @@ def apisubscribe():
 
     if not plan:
         return jsonify({'message': 'Subscription plan is required'}), 400
-
+    if plan not in ["free", "1000", "3000", "5000", "10000"]:
+        return jsonify({"message": "invalid subscription plan"})
+    
     if plan == 'free':
         refno = int(random.random() * 10000000)
         session['refno'] = refno
@@ -2834,7 +2870,7 @@ def apisubscribe():
         db.session.commit()
 
         return jsonify({
-            'message': 'Subscription successful',
+            'message': 'Subscription initiated successfully',
             'subscription': {
                 'id': created_sub.sub_id,
                 'plan': created_sub.sub_plan,
@@ -2936,7 +2972,11 @@ def apipaystack():
                 identity=str(reference),
                 expires_delta=timedelta(minutes=2)
             )
-            act_url = url_for('user_api.apiactivating', jwt=token, _external=True)
+            token2 = create_access_token(
+                identity=f"designer:{p.payment_desiid}",
+                expires_delta=timedelta(minutes=2)
+            )
+            act_url = url_for('user_api.apiactivating', jwt=token, access_token=token2, _external=True)
             return redirect(act_url), 302
             #return jsonify({'message': 'Payment successful', 'status': 'paid',
                             #'amount': amt, 'ip': ipaddress}), 200
@@ -2977,9 +3017,10 @@ def apiactivating():
         1) Query-string JWT (?jwt=...) → contains payment reference
         2) Header JWT (Authorization: Bearer ...) → contains 'designer:ID'
     """
+
     # === REQUIRE BOTH TOKENS ===
-    auth_header = request.headers.get('Authorization') or request.headers.get('authorization')
     payment_jwt = request.args.get('jwt')
+    auth_header = request.args.get('access_token')
 
     if not payment_jwt or not auth_header:
         return jsonify({
@@ -2995,8 +3036,10 @@ def apiactivating():
 
     # === VERIFY USER JWT (header) ===
     try:
-        verify_jwt_in_request(locations=['headers'])
-        user_identity = get_jwt_identity()
+        # verify_jwt_in_request(locations=['headers'])
+        decoded_access = decode_token(auth_header)
+        user_identity= decoded_access["sub"]
+        # user_identity = get_jwt_identity()
     except Exception:
         return jsonify({'message': 'Invalid or expired authorization token'}), 401
 
@@ -3068,7 +3111,7 @@ def apiactivating():
             post_author_email=commenter_email,
             recipients=recipients
         )
-
+    refresh_token = create_refresh_token(identity=f"designer:{desi_loggedin}")
     # === RESPONSE ===
     return jsonify({
         'message': 'Activation successful',
@@ -3076,7 +3119,9 @@ def apiactivating():
         'status': 'active',
         'plan': substat.sub_plan,
         'start_date': str(Dstart),
-        'end_date': str(Dend)
+        'end_date': str(Dend),
+        'access_token':auth_header,
+        'refresh_token': refresh_token
     }), 200
 
 
@@ -3463,7 +3508,9 @@ def page_not_found(error):
     #     ).all()
 
     # Convert notifications to a list of dictionaries
-    # notifications = [{'id': n.id, 'type': n.notify_read} for n in noti]
+    # 'notification':[{'noti_postid':nt.notify_postid if nt.notify_postid else None,
+    #                          'noti_message':nt.notify_read if nt.notify_read else None,
+    #                          'noti_clientid':nt.notify_custid if nt.notify_custid else None, 'noti_likeid':nt.notify_likeid if nt.notify_likeid else None, 'noti_commentid':nt.notify_comid if nt.notify_comid else None, 'noti_shareid':nt.notify_shareid if nt.notify_shareid else None, 'noti_bookappointmentid':nt.notify_baid if nt.notify_baid else None, 'noti_transaction_paymentid':nt.notify_tpayid if nt.notify_tpayid else None, 'noti_transaction_payment_status':nt.notifytpayobj.tpay_status if nt.notifytpayobj else None, 'noti_creatorid':nt.notify_desiid if nt.notify_desiid else None, 'noti_creator_firstname':nt.notifydesiobj.desi_fname if nt.notifydesiobj else None, 'noti_client_firstname':nt.notifycustobj.cust_fname if nt.notifycustobj else None, 'noti_subscriptionid':nt.notify_subid if nt.notify_subid else None, 'noti_subplan':nt.notifysubobj.sub_plan if nt.notifysubobj else None, 'noti_sub_status':nt.notifysubobj.sub_status if nt.notifysubobj else None, 'noti_paymentid':nt.notify_paymentid if nt.notify_paymentid else None, 'noti_payment_status':nt.notifypayobj.payment_status if nt.notifypayobj else None } for nt in noti],
 
     return jsonify({
         'message': 'Page not found',
@@ -3532,6 +3579,7 @@ def search_results():
         'title': pot.post_title,
         'content': pot.post_body,
         "created_at": pot.post_date.isoformat(),
+        "creator_pic": f"https://styleitafrica.pythonanywhere.com/static/images/designerpic/{pot.designerobj.desi_pic}" if pot.designerobj and pot.designerobj.desi_pic else None,
         "status": pot.post_suspend,
         "delete": pot.post_delete,
         "likes_Count": len(pot.likes),
@@ -3608,6 +3656,9 @@ def api_desisearch():
         'business_name': desi.desi_businessName,
         'first_name': desi.desi_fname,
         'last_name': desi.desi_lname,
+        'bio': desi.desi_bio,
+        'creator_pic': f"https://styleitafrica.pythonanywhere.com/static/images/designerpic/{desi.desi_pic}" if desi.desi_pic else None,
+        'about': desi.desi_about,
         'state': desi.stateobj2.state_name if desi.stateobj2 else None,
         'city': desi.desi_city,
         'lga': desi.lgaobj2.lga_name if desi.lgaobj2 else None
