@@ -250,7 +250,22 @@ def trending_api():
         {
             'notification':[{'noti_postid':nt.notify_postid if nt.notify_postid else None,
                              'noti_message':nt.notify_read if nt.notify_read else None,
-                             'noti_clientid':nt.notify_custid if nt.notify_custid else None, 'noti_likeid':nt.notify_likeid if nt.notify_likeid else None, 'noti_commentid':nt.notify_comid if nt.notify_comid else None, 'noti_shareid':nt.notify_shareid if nt.notify_shareid else None, 'noti_bookappointmentid':nt.notify_baid if nt.notify_baid else None, 'noti_transaction_paymentid':nt.notify_tpayid if nt.notify_tpayid else None, 'noti_transaction_payment_status':nt.notifytpayobj.tpay_status if nt.notifytpayobj else None, 'noti_creatorid':nt.notify_desiid if nt.notify_desiid else None, 'noti_creator_firstname':nt.notifydesiobj.desi_fname if nt.notifydesiobj else None, 'noti_client_firstname':nt.notifycustobj.cust_fname if nt.notifycustobj else None, 'noti_subscriptionid':nt.notify_subid if nt.notify_subid else None, 'noti_subplan':nt.notifysubobj.sub_plan if nt.notifysubobj else None, 'noti_sub_status':nt.notifysubobj.sub_status if nt.notifysubobj else None, 'noti_paymentid':nt.notify_paymentid if nt.notify_paymentid else None, 'noti_payment_status':nt.notifypayobj.payment_status if nt.notifypayobj else None } for nt in noti],
+                             'noti_date': nt.notify_date if nt.notify_date else None,
+                             'noti_clientid':nt.notify_custid if nt.notify_custid else None, 
+                             'noti_likeid':nt.notify_likeid if nt.notify_likeid else None, 
+                             'noti_commentid':nt.notify_comid if nt.notify_comid else None, 
+                             'noti_shareid':nt.notify_shareid if nt.notify_shareid else None, 
+                             'noti_bookappointmentid':nt.notify_baid if nt.notify_baid else None, 
+                             'noti_transaction_paymentid':nt.notify_tpayid if nt.notify_tpayid else None, 
+                             'noti_transaction_payment_status':nt.notifytpayobj.tpay_status if nt.notifytpayobj else None, 
+                             'noti_creatorid':nt.notify_desiid if nt.notify_desiid else None, 
+                             'noti_creator_firstname':nt.notifydesiobj.desi_fname if nt.notifydesiobj else None, 
+                             'noti_client_firstname':nt.notifycustobj.cust_fname if nt.notifycustobj else None, 
+                             'noti_subscriptionid':nt.notify_subid if nt.notify_subid else None, 
+                             'noti_subplan':nt.notifysubobj.sub_plan if nt.notifysubobj else None, 
+                             'noti_sub_status':nt.notifysubobj.sub_status if nt.notifysubobj else None, 
+                             'noti_paymentid':nt.notify_paymentid if nt.notify_paymentid else None, 
+                             'noti_payment_status':nt.notifypayobj.payment_status if nt.notifypayobj else None } for nt in noti],
             'follows': [{'follow_id':f.follow_id if f.follow_id else None, 'followed_desiid':f.follow_desiid if f.follow_desiid else None,
                     'follower_custid':f.follow_custid if f.follow_custid else None} for f in (follow or [])],
             "id": posti.post_id,
@@ -496,7 +511,22 @@ def get_post_data(id):
 
             'notification':[{'noti_postid':nt.notify_postid if nt.notify_postid else None,
                              'noti_message':nt.notify_read if nt.notify_read else None,
-                             'noti_clientid':nt.notify_custid if nt.notify_custid else None, 'noti_likeid':nt.notify_likeid if nt.notify_likeid else None, 'noti_commentid':nt.notify_comid if nt.notify_comid else None, 'noti_shareid':nt.notify_shareid if nt.notify_shareid else None, 'noti_bookappointmentid':nt.notify_baid if nt.notify_baid else None, 'noti_transaction_paymentid':nt.notify_tpayid if nt.notify_tpayid else None, 'noti_transaction_payment_status':nt.notifytpayobj.tpay_status if nt.notifytpayobj else None, 'noti_creatorid':nt.notify_desiid if nt.notify_desiid else None, 'noti_creator_firstname':nt.notifydesiobj.desi_fname if nt.notifydesiobj else None, 'noti_client_firstname':nt.notifycustobj.cust_fname if nt.notifycustobj else None, 'noti_subscriptionid':nt.notify_subid if nt.notify_subid else None, 'noti_subplan':nt.notifysubobj.sub_plan if nt.notifysubobj else None, 'noti_sub_status':nt.notifysubobj.sub_status if nt.notifysubobj else None, 'noti_paymentid':nt.notify_paymentid if nt.notify_paymentid else None, 'noti_payment_status':nt.notifypayobj.payment_status if nt.notifypayobj else None } for nt in noti],
+                             'noti_date': nt.notify_date if nt.notify_date else None,
+                             'noti_clientid':nt.notify_custid if nt.notify_custid else None, 
+                             'noti_likeid':nt.notify_likeid if nt.notify_likeid else None, 
+                             'noti_commentid':nt.notify_comid if nt.notify_comid else None, 
+                             'noti_shareid':nt.notify_shareid if nt.notify_shareid else None, 
+                             'noti_bookappointmentid':nt.notify_baid if nt.notify_baid else None, 
+                             'noti_transaction_paymentid':nt.notify_tpayid if nt.notify_tpayid else None, 
+                             'noti_transaction_payment_status':nt.notifytpayobj.tpay_status if nt.notifytpayobj else None, 
+                             'noti_creatorid':nt.notify_desiid if nt.notify_desiid else None, 
+                             'noti_creator_firstname':nt.notifydesiobj.desi_fname if nt.notifydesiobj else None, 
+                             'noti_client_firstname':nt.notifycustobj.cust_fname if nt.notifycustobj else None, 
+                             'noti_subscriptionid':nt.notify_subid if nt.notify_subid else None, 
+                             'noti_subplan':nt.notifysubobj.sub_plan if nt.notifysubobj else None, 
+                             'noti_sub_status':nt.notifysubobj.sub_status if nt.notifysubobj else None, 
+                             'noti_paymentid':nt.notify_paymentid if nt.notify_paymentid else None, 
+                             'noti_payment_status':nt.notifypayobj.payment_status if nt.notifypayobj else None } for nt in noti],
         }
 
         return jsonify({"post":post_data,
@@ -1844,7 +1874,22 @@ def customer_profile():
 
             'notification':[{'noti_postid':nt.notify_postid if nt.notify_postid else None,
                              'noti_message':nt.notify_read if nt.notify_read else None,
-                             'noti_clientid':nt.notify_custid if nt.notify_custid else None, 'noti_likeid':nt.notify_likeid if nt.notify_likeid else None, 'noti_commentid':nt.notify_comid if nt.notify_comid else None, 'noti_shareid':nt.notify_shareid if nt.notify_shareid else None, 'noti_bookappointmentid':nt.notify_baid if nt.notify_baid else None, 'noti_transaction_paymentid':nt.notify_tpayid if nt.notify_tpayid else None, 'noti_transaction_payment_status':nt.notifytpayobj.tpay_status if nt.notifytpayobj else None, 'noti_creatorid':nt.notify_desiid if nt.notify_desiid else None, 'noti_creator_firstname':nt.notifydesiobj.desi_fname if nt.notifydesiobj else None, 'noti_client_firstname':nt.notifycustobj.cust_fname if nt.notifycustobj else None, 'noti_subscriptionid':nt.notify_subid if nt.notify_subid else None, 'noti_subplan':nt.notifysubobj.sub_plan if nt.notifysubobj else None, 'noti_sub_status':nt.notifysubobj.sub_status if nt.notifysubobj else None, 'noti_paymentid':nt.notify_paymentid if nt.notify_paymentid else None, 'noti_payment_status':nt.notifypayobj.payment_status if nt.notifypayobj else None } for nt in noti],
+                             'noti_date': nt.notify_date if nt.notify_date else None,
+                             'noti_clientid':nt.notify_custid if nt.notify_custid else None, 
+                             'noti_likeid':nt.notify_likeid if nt.notify_likeid else None, 
+                             'noti_commentid':nt.notify_comid if nt.notify_comid else None, 
+                             'noti_shareid':nt.notify_shareid if nt.notify_shareid else None, 
+                             'noti_bookappointmentid':nt.notify_baid if nt.notify_baid else None, 
+                             'noti_transaction_paymentid':nt.notify_tpayid if nt.notify_tpayid else None,
+                             'noti_transaction_payment_status':nt.notifytpayobj.tpay_status if nt.notifytpayobj else None, 
+                             'noti_creatorid':nt.notify_desiid if nt.notify_desiid else None, 
+                             'noti_creator_firstname':nt.notifydesiobj.desi_fname if nt.notifydesiobj else None, 
+                             'noti_client_firstname':nt.notifycustobj.cust_fname if nt.notifycustobj else None, 
+                             'noti_subscriptionid':nt.notify_subid if nt.notify_subid else None, 
+                             'noti_subplan':nt.notifysubobj.sub_plan if nt.notifysubobj else None, 
+                             'noti_sub_status':nt.notifysubobj.sub_status if nt.notifysubobj else None, 
+                             'noti_paymentid':nt.notify_paymentid if nt.notify_paymentid else None, 
+                             'noti_payment_status':nt.notifypayobj.payment_status if nt.notifypayobj else None } for nt in noti],
 
             'follows': [{'id':f.follow_id, 'follow_desiid':f.follow_desiid,
                          'follow_custid':f.follow_custid} for f in follow],
@@ -2436,7 +2481,22 @@ def designer_profile():
             "subpaystatus":subt.sub_paystatus}if subt else None],
             'notification':[{'noti_postid':nt.notify_postid if nt.notify_postid else None,
                              'noti_message':nt.notify_read if nt.notify_read else None,
-                             'noti_clientid':nt.notify_custid if nt.notify_custid else None, 'noti_likeid':nt.notify_likeid if nt.notify_likeid else None, 'noti_commentid':nt.notify_comid if nt.notify_comid else None, 'noti_shareid':nt.notify_shareid if nt.notify_shareid else None, 'noti_bookappointmentid':nt.notify_baid if nt.notify_baid else None, 'noti_transaction_paymentid':nt.notify_tpayid if nt.notify_tpayid else None, 'noti_transaction_payment_status':nt.notifytpayobj.tpay_status if nt.notifytpayobj else None, 'noti_creatorid':nt.notify_desiid if nt.notify_desiid else None, 'noti_creator_firstname':nt.notifydesiobj.desi_fname if nt.notifydesiobj else None, 'noti_client_firstname':nt.notifycustobj.cust_fname if nt.notifycustobj else None, 'noti_subscriptionid':nt.notify_subid if nt.notify_subid else None, 'noti_subplan':nt.notifysubobj.sub_plan if nt.notifysubobj else None, 'noti_sub_status':nt.notifysubobj.sub_status if nt.notifysubobj else None, 'noti_paymentid':nt.notify_paymentid if nt.notify_paymentid else None, 'noti_payment_status':nt.notifypayobj.payment_status if nt.notifypayobj else None } for nt in noti],
+                             'noti_date': nt.notify_date if nt.notify_date else None,
+                             'noti_clientid':nt.notify_custid if nt.notify_custid else None, 
+                             'noti_likeid':nt.notify_likeid if nt.notify_likeid else None, 
+                             'noti_commentid':nt.notify_comid if nt.notify_comid else None, 
+                             'noti_shareid':nt.notify_shareid if nt.notify_shareid else None, 
+                             'noti_bookappointmentid':nt.notify_baid if nt.notify_baid else None, 
+                             'noti_transaction_paymentid':nt.notify_tpayid if nt.notify_tpayid else None, 
+                             'noti_transaction_payment_status':nt.notifytpayobj.tpay_status if nt.notifytpayobj else None, 
+                             'noti_creatorid':nt.notify_desiid if nt.notify_desiid else None, 
+                             'noti_creator_firstname':nt.notifydesiobj.desi_fname if nt.notifydesiobj else None, 
+                             'noti_client_firstname':nt.notifycustobj.cust_fname if nt.notifycustobj else None, 
+                             'noti_subscriptionid':nt.notify_subid if nt.notify_subid else None, 
+                             'noti_subplan':nt.notifysubobj.sub_plan if nt.notifysubobj else None, 
+                             'noti_sub_status':nt.notifysubobj.sub_status if nt.notifysubobj else None, 
+                             'noti_paymentid':nt.notify_paymentid if nt.notify_paymentid else None, 
+                             'noti_payment_status':nt.notifypayobj.payment_status if nt.notifypayobj else None } for nt in noti],
             "jobs": [{"jobPic":f"https://styleitafrica.pythonanywhere.com/static/images/completed_task/{pt.jb_pic}" if pt.jb_pic else None, "clientFirstName":pt.jbcustobj.cust_fname if pt.jbcustobj else None,
             "clientLastName":pt.jbcustobj.cust_lname if pt.jbcustobj else None, "date":pt.jb_date if pt else None,"status":pt.jb_status.title() if pt else None, } for pt in jb.items],
             "bank": [{"accountName":bnk.bnk_acname, "accountNo":bnk.bnk_acno, "bankName":bnk.bnk_bankname}if bnk else None],
@@ -2788,7 +2848,22 @@ def apisubplan():
         },
         'notification':[{'noti_postid':nt.notify_postid if nt.notify_postid else None,
                              'noti_message':nt.notify_read if nt.notify_read else None,
-                             'noti_clientid':nt.notify_custid if nt.notify_custid else None, 'noti_likeid':nt.notify_likeid if nt.notify_likeid else None, 'noti_commentid':nt.notify_comid if nt.notify_comid else None, 'noti_shareid':nt.notify_shareid if nt.notify_shareid else None, 'noti_bookappointmentid':nt.notify_baid if nt.notify_baid else None, 'noti_transaction_paymentid':nt.notify_tpayid if nt.notify_tpayid else None, 'noti_transaction_payment_status':nt.notifytpayobj.tpay_status if nt.notifytpayobj else None, 'noti_creatorid':nt.notify_desiid if nt.notify_desiid else None, 'noti_creator_firstname':nt.notifydesiobj.desi_fname if nt.notifydesiobj else None, 'noti_client_firstname':nt.notifycustobj.cust_fname if nt.notifycustobj else None, 'noti_subscriptionid':nt.notify_subid if nt.notify_subid else None, 'noti_subplan':nt.notifysubobj.sub_plan if nt.notifysubobj else None, 'noti_sub_status':nt.notifysubobj.sub_status if nt.notifysubobj else None, 'noti_paymentid':nt.notify_paymentid if nt.notify_paymentid else None, 'noti_payment_status':nt.notifypayobj.payment_status if nt.notifypayobj else None } for nt in noti]
+                             'noti_date': nt.notify_date if nt.notify_date else None,
+                             'noti_clientid':nt.notify_custid if nt.notify_custid else None, 
+                             'noti_likeid':nt.notify_likeid if nt.notify_likeid else None, 
+                             'noti_commentid':nt.notify_comid if nt.notify_comid else None, 
+                             'noti_shareid':nt.notify_shareid if nt.notify_shareid else None, 
+                             'noti_bookappointmentid':nt.notify_baid if nt.notify_baid else None, 
+                             'noti_transaction_paymentid':nt.notify_tpayid if nt.notify_tpayid else None, 
+                             'noti_transaction_payment_status':nt.notifytpayobj.tpay_status if nt.notifytpayobj else None, 
+                             'noti_creatorid':nt.notify_desiid if nt.notify_desiid else None, 
+                             'noti_creator_firstname':nt.notifydesiobj.desi_fname if nt.notifydesiobj else None, 
+                             'noti_client_firstname':nt.notifycustobj.cust_fname if nt.notifycustobj else None, 
+                             'noti_subscriptionid':nt.notify_subid if nt.notify_subid else None, 
+                             'noti_subplan':nt.notifysubobj.sub_plan if nt.notifysubobj else None, 
+                             'noti_sub_status':nt.notifysubobj.sub_status if nt.notifysubobj else None, 
+                             'noti_paymentid':nt.notify_paymentid if nt.notify_paymentid else None, 
+                             'noti_payment_status':nt.notifypayobj.payment_status if nt.notifypayobj else None } for nt in noti]
     }), 200
 
 
@@ -3486,11 +3561,11 @@ def page_not_found(error):
     #     logged_in = userid
     #     desi_loggedin = None
 
-    # Retrieve user details
+    # # Retrieve user details
     # des = db.session.get(Designer, desi_loggedin) if desi_loggedin else None
     # cus = db.session.get(Customer, logged_in) if logged_in else None
 
-    # Fetch notifications
+    # # Fetch notifications
     # noti = []
     # if desi_loggedin:
     #     noti = Notification.query.filter_by(notify_read='unread', notify_desiid=des.desi_id).all()
@@ -3507,10 +3582,25 @@ def page_not_found(error):
     #         Notification.notify_custid == cus.cust_id
     #     ).all()
 
-    # Convert notifications to a list of dictionaries
-    # 'notification':[{'noti_postid':nt.notify_postid if nt.notify_postid else None,
-    #                          'noti_message':nt.notify_read if nt.notify_read else None,
-    #                          'noti_clientid':nt.notify_custid if nt.notify_custid else None, 'noti_likeid':nt.notify_likeid if nt.notify_likeid else None, 'noti_commentid':nt.notify_comid if nt.notify_comid else None, 'noti_shareid':nt.notify_shareid if nt.notify_shareid else None, 'noti_bookappointmentid':nt.notify_baid if nt.notify_baid else None, 'noti_transaction_paymentid':nt.notify_tpayid if nt.notify_tpayid else None, 'noti_transaction_payment_status':nt.notifytpayobj.tpay_status if nt.notifytpayobj else None, 'noti_creatorid':nt.notify_desiid if nt.notify_desiid else None, 'noti_creator_firstname':nt.notifydesiobj.desi_fname if nt.notifydesiobj else None, 'noti_client_firstname':nt.notifycustobj.cust_fname if nt.notifycustobj else None, 'noti_subscriptionid':nt.notify_subid if nt.notify_subid else None, 'noti_subplan':nt.notifysubobj.sub_plan if nt.notifysubobj else None, 'noti_sub_status':nt.notifysubobj.sub_status if nt.notifysubobj else None, 'noti_paymentid':nt.notify_paymentid if nt.notify_paymentid else None, 'noti_payment_status':nt.notifypayobj.payment_status if nt.notifypayobj else None } for nt in noti],
+    # # Convert notifications to a list of dictionaries
+    # notifications = [{'noti_postid':nt.notify_postid if nt.notify_postid else None,
+    #                   'noti_date': nt.notify_date if nt.notify_date else None, 
+    #                   'noti_message':nt.notify_read if nt.notify_read else None,
+    #                   'noti_clientid':nt.notify_custid if nt.notify_custid else None, 
+    #                   'noti_likeid':nt.notify_likeid if nt.notify_likeid else None, 
+    #                   'noti_commentid':nt.notify_comid if nt.notify_comid else None, 
+    #                   'noti_shareid':nt.notify_shareid if nt.notify_shareid else None, 
+    #                   'noti_bookappointmentid':nt.notify_baid if nt.notify_baid else None, 
+    #                   'noti_transaction_paymentid':nt.notify_tpayid if nt.notify_tpayid else None, 
+    #                   'noti_transaction_payment_status':nt.notifytpayobj.tpay_status if nt.notifytpayobj else None, 
+    #                   'noti_creatorid':nt.notify_desiid if nt.notify_desiid else None, 
+    #                   'noti_creator_firstname':nt.notifydesiobj.desi_fname if nt.notifydesiobj else None, 
+    #                   'noti_client_firstname':nt.notifycustobj.cust_fname if nt.notifycustobj else None, 
+    #                   'noti_subscriptionid':nt.notify_subid if nt.notify_subid else None, 
+    #                   'noti_subplan':nt.notifysubobj.sub_plan if nt.notifysubobj else None, 
+    #                   'noti_sub_status':nt.notifysubobj.sub_status if nt.notifysubobj else None, 
+    #                   'noti_paymentid':nt.notify_paymentid if nt.notify_paymentid else None, 
+    #                   'noti_payment_status':nt.notifypayobj.payment_status if nt.notifypayobj else None } for nt in noti]
 
     return jsonify({
         'message': 'Page not found',

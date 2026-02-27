@@ -1102,8 +1102,8 @@ def api_admin_designers():
     designers_list = [
         {
             'id':desi.desi_id, 'businessName': desi.desi_businessName,       # Assuming you have a desi_id linking to the designer
-            'state': desi.stateobj2.state_name if desi.stateobj2.state_name else desi.desi_state,
-            'lga':desi.lgaobj2.lga_name if desi.lgaobj2.lga_name else desi.desi_city,
+            'state': desi.stateobj2.state_name if desi.stateobj2 else desi.desi_state,
+            'lga':desi.lgaobj2.lga_name if desi.lgaobj2 else desi.desi_city,
             "Country": desi.desicountry.country_name if desi.desicountry else None,
             "profil_pic": f"https://styleitafrica.pythonanywhere.com/static/images/profile/designer/{desi.desi_pic}" if desi.desi_pic else None,
             'firstname': desi.desi_fname, 'lastname': desi.desi_lname, 'email': desi.desi_email,
@@ -1156,8 +1156,8 @@ def api_admin_customers():
         'gender': cus.cust_gender, 'registerDate': cus.cust_regdate,
         'profilePic': f"https://styleitafrica.pythonanywhere.com/static/images/profile/customer/{cus.cust_pic}" if cus.cust_pic else None, 'status': cus.cust_status,
         'access': cus.cust_access, "country": cus.custcountry.country_name if cus.custcountry else None,
-        'state': cus.stateobj.state_name if cus.stateobj.state_name else cus.cust_state,
-        'lga': cus.lgaobj.lga_name if cus.lgaobj.lga_name else cus.cust_city
+        'state': cus.stateobj.state_name if cus.stateobj else cus.cust_state,
+        'lga': cus.lgaobj.lga_name if cus.lgaobj else cus.cust_city
     } for cus in customers.items]
 
     return jsonify({
@@ -1463,11 +1463,19 @@ def admin_search_api():
     last_admin_active(userid, user_type)
     adm = db.session.get(Admin, admin)
     spa = db.session.get(Superadmin, spadmin)
-
+    
+    
     data = request.get_json()
-    word = data.get('search', '')
-    page = request.args.get('page', 1, type=int)
+        
+    if not data:
+        return jsonify({'error': 'Search query required'}), 400
 
+    if not isinstance(data['search'], str):
+        return jsonify({'error': 'Search query must be string'}), 400
+    
+    word = data.get('search', '').strip()
+    page = request.args.get('page', 1, type=int)
+    
     query = (Posting.query.outerjoin(Designer, Posting.post_id == Designer.desi_id)
              .filter(
                  or_(
