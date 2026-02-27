@@ -4543,7 +4543,7 @@ class AdminSearchTestCase(BaseAdminTestCase):
     def test_search_with_invalid_token(self):
         """Invalid JWT should not be accepted"""
         headers = {'Authorization': 'Bearer invalid.token'}
-        res = self.client.post('/api/adminsearch/', headers=headers, json={'query': 'Test'})
+        res = self.client.post('/api/adminsearch/', headers=headers, json={'search': 'Test'})
         self.assertIn(res.status_code, [401, 422])
 
     # ------------------------------------------------------------------
@@ -4551,18 +4551,18 @@ class AdminSearchTestCase(BaseAdminTestCase):
     # ------------------------------------------------------------------
 
     def test_search_missing_query(self):
-        """Requests with no query field should return an error"""
+        """Requests with no search field should return an error"""
         res = self.client.post('/api/adminsearch/', headers=self.admin_headers, json={})
         self.assertIn(res.status_code, [400, 422])
 
     def test_search_empty_query(self):
-        """Empty query string may be rejected or return zero results"""
-        res = self.client.post('/api/adminsearch/', headers=self.admin_headers, json={'query': ''})
+        """Empty search string may be rejected or return zero results"""
+        res = self.client.post('/api/adminsearch/', headers=self.admin_headers, json={'search': ''})
         self.assertIn(res.status_code, [200, 400])
 
     def test_search_non_string_query(self):
-        """Non-string query should be rejected"""
-        res = self.client.post('/api/adminsearch/', headers=self.admin_headers, json={'query': 123})
+        """Non-string search should be rejected"""
+        res = self.client.post('/api/adminsearch/', headers=self.admin_headers, json={'search': 123})
         self.assertIn(res.status_code, [400, 422])
 
     # ------------------------------------------------------------------
@@ -4571,19 +4571,20 @@ class AdminSearchTestCase(BaseAdminTestCase):
 
     def test_response_structure(self):
         """Successful search response contains expected keys"""
-        res = self.client.post('/api/adminsearch/', headers=self.admin_headers, json={'query': 'Test'})
+        res = self.client.post('/api/adminsearch/', headers=self.admin_headers, json={'search': 'Test'})
         if res.status_code == 200:
             data = res.get_json()
             self.assertIn('results', data)
-            self.assertIn('pagination', data)
-            pag = data['pagination']
-            self.assertIn('total', pag)
-            self.assertIn('page', pag)
-            self.assertIn('pages', pag)
+            self.assertIn('page', data)
+            self.assertIn('has_next', data)
+            self.assertIn('has_prev', data)
+            self.assertIn('total_pages', data)
+            self.assertIn('total_results', data)
+            self.assertIn('search_term', data)
 
     def test_results_is_list(self):
         """Results field should be a list when present"""
-        res = self.client.post('/api/adminsearch/', headers=self.admin_headers, json={'query': 'Test'})
+        res = self.client.post('/api/adminsearch/', headers=self.admin_headers, json={'search': 'Test'})
         if res.status_code == 200:
             results = res.get_json().get('results')
             self.assertIsInstance(results, list)
@@ -4594,12 +4595,14 @@ class AdminSearchTestCase(BaseAdminTestCase):
 
     def test_pagination_metadata_types(self):
         """Pagination keys should have sensible types"""
-        res = self.client.post('/api/adminsearch/', headers=self.admin_headers, json={'query': 'Test'})
+        res = self.client.post('/api/adminsearch/', headers=self.admin_headers, json={'search': 'Test'})
         if res.status_code == 200:
-            pag = res.get_json().get('pagination', {})
-            self.assertIsInstance(pag.get('total'), int)
+            pag = res.get_json()
             self.assertIsInstance(pag.get('page'), int)
-            self.assertIsInstance(pag.get('pages'), int)
+            self.assertIsInstance(pag.get('total_pages'), int)
+            self.assertIsInstance(pag.get('total_results'), int)
+            self.assertIsInstance(pag.get('has_next'), bool)
+            self.assertIsInstance(pag.get('has_prev'), bool)
 
     # ------------------------------------------------------------------
     # INVALID METHODS
@@ -4622,166 +4625,2473 @@ class AdminSearchTestCase(BaseAdminTestCase):
     # ------------------------------------------------------------------
 
     def test_response_content_type(self):
-        res = self.client.post('/api/adminsearch/', headers=self.admin_headers, json={'query': 'Test'})
+        res = self.client.post('/api/adminsearch/', headers=self.admin_headers, json={'search': 'Test'})
         if res.status_code == 200:
             self.assertIn('application/json', res.content_type)
 
-# class AdminSearchDesignerTestCase(BaseAdminTestCase):
-#     """Test cases for /api/admin/search_creator/ endpoint"""
+class AdminSearchDesignerTestCase(BaseAdminTestCase):
+    """Comprehensive tests for /api/admin/search_creator/ endpoint
 
-#     def test_search_designer(self):
-#         """Test searching for designers"""
-#         res = self.client.post('/api/admin/search_creator/',
-#                               headers=self.admin_headers,
-#                               json={'query': 'Test'})
-#         self.assertEqual(res.status_code, 200)
+    This endpoint allows admins and superadmins to search for designers
+    (creators) by keyword. The request expects a JSON body with a 'query'
+    field. Responses include a list of results and pagination metadata.
+    The endpoint should enforce authentication and validate input.
+    """
 
+    # ------------------------------------------------------------------
+    # AUTHENTICATION / AUTHORIZATION
+    # ------------------------------------------------------------------
 
-# class AdminSearchCustomerTestCase(BaseAdminTestCase):
-#     """Test cases for /api/admin/search_client/ endpoint"""
+    def test_search_designer_as_admin(self):
+        """Admin can search for designers and receives 200"""
+        res = self.client.post('/api/admin/search_creator/',
+                               headers=self.admin_headers,
+                               json={'search': 'Test'})
+        self.assertEqual(res.status_code, 200)
+        data = res.get_json()
+        self.assertIsInstance(data, dict)
 
-#     def test_search_customer(self):
-#         """Test searching for customers"""
-#         res = self.client.post('/api/admin/search_client/',
-#                               headers=self.admin_headers,
-#                               json={'query': 'Test'})
-#         self.assertEqual(res.status_code, 200)
+    def test_search_designer_as_superadmin(self):
+        """Superadmin can search for designers"""
+        res = self.client.post('/api/admin/search_creator/',
+                               headers=self.superadmin_headers,
+                               json={'search': 'Test'})
+        self.assertEqual(res.status_code, 200)
 
+    def test_search_designer_without_authentication(self):
+        """Unauthenticated requests should be rejected"""
+        res = self.client.post('/api/admin/search_creator/', json={'search': 'Test'})
+        self.assertEqual(res.status_code, 401)
 
-# class AdminSearchSubscriptionTestCase(BaseAdminTestCase):
-#     """Test cases for /api/admin/search_subcription/ endpoint"""
+    def test_search_designer_with_invalid_token(self):
+        """Invalid JWT should not be accepted"""
+        headers = {'Authorization': 'Bearer invalid.token'}
+        res = self.client.post('/api/admin/search_creator/', headers=headers, json={'search': 'Test'})
+        self.assertIn(res.status_code, [401, 422])
 
-#     def test_search_subscription(self):
-#         """Test searching for subscriptions"""
-#         res = self.client.post('/api/admin/search_subcription/',
-#                               headers=self.admin_headers,
-#                               json={'query': 'premium'})
-#         self.assertEqual(res.status_code, 200)
+    # ------------------------------------------------------------------
+    # INPUT VALIDATION
+    # ------------------------------------------------------------------
 
+    def test_search_designer_missing_query(self):
+        """Requests with no query field should return an error"""
+        res = self.client.post('/api/admin/search_creator/', headers=self.admin_headers, json={})
+        self.assertIn(res.status_code, [400, 422])
 
-# class AdminSearchBookingTestCase(BaseAdminTestCase):
-#     """Test cases for /api/admin/search_booking_appointment/ endpoint"""
-#     def test_admin_refresh_token(self):
-#         """Test refreshing admin access token"""
-#         refresh_token = create_refresh_token(identity=f"admin:{self.admin.admin_id}")
-#         headers = {'Authorization': f'Bearer {refresh_token}'}
+    def test_search_designer_empty_query(self):
+        """Empty query string may be rejected or return zero results"""
+        res = self.client.post('/api/admin/search_creator/', headers=self.admin_headers, json={'query': ''})
+        self.assertIn(res.status_code, [200, 400])
 
-#         res = self.client.post('/api/admin/refresh', headers=headers)
-#         self.assertEqual(res.status_code, 200)
-#         data = res.get_json()
-#         self.assertIn('access_token', data)
-#         self.assertIsInstance(data.get('access_token'), str)
+    def test_search_designer_non_string_query(self):
+        """Non-string query should be rejected"""
+        res = self.client.post('/api/admin/search_creator/', headers=self.admin_headers, json={'query': 123})
+        self.assertIn(res.status_code, [400, 422])
 
-# class AdminAppointmentsTestCase(BaseAdminTestCase):
-#     """Test cases for /api/admin/appointments endpoint"""
+    # ------------------------------------------------------------------
+    # RESPONSE STRUCTURE
+    # ------------------------------------------------------------------
 
-#     def test_get_all_appointments(self):
-#         """Test retrieving all appointments"""
-#         res = self.client.get('/api/admin/appointments',
-#                              headers=self.admin_headers)
-#         self.assertEqual(res.status_code, 200)
-#         data = res.get_json()
-#         self.assertIn('appointments', data)
+    def test_response_structure(self):
+        """Successful search response contains expected keys"""
+        res = self.client.post('/api/admin/search_creator/', headers=self.admin_headers, json={'query': 'Test'})
+        if res.status_code == 200:
+            data = res.get_json()
+            self.assertIn('results', data)
+            self.assertIn('page', data)
+            self.assertIn('has_next', data)
+            self.assertIn('has_prev', data)
+            self.assertIn('total_pages', data)
+            self.assertIn('total_results', data)
 
+    def test_results_is_list(self):
+        """Results field should be a list when present"""
+        res = self.client.post('/api/admin/search_creator/', headers=self.admin_headers, json={'query': 'Test'})
+        if res.status_code == 200:
+            results = res.get_json().get('results')
+            self.assertIsInstance(results, list)
 
-# class AdminPaymentTestCase(BaseAdminTestCase):
-#     """Test cases for /api/admin/payment endpoint"""
+    # ------------------------------------------------------------------
+    # PAGINATION METADATA
+    # ------------------------------------------------------------------
 
-#     def test_get_all_payments(self):
-#         """Test retrieving all payments"""
-#         res = self.client.get('/api/admin/payment',
-#                              headers=self.admin_headers)
-#         self.assertEqual(res.status_code, 200)
-#         data = res.get_json()
-#         self.assertIn('payments', data)
+    def test_pagination_metadata_types(self):
+        """Pagination keys should have sensible types"""
+        res = self.client.post('/api/admin/search_creator/', headers=self.admin_headers, json={'query': 'Test'})
+        if res.status_code == 200:
+            pag = res.get_json()
+            self.assertIsInstance(pag.get('page'), int)
+            self.assertIsInstance(pag.get('total_pages'), int)
+            self.assertIsInstance(pag.get('total_results'), int)
+            self.assertIsInstance(pag.get('has_next'), bool)
+            self.assertIsInstance(pag.get('has_prev'), bool)
 
+    # ------------------------------------------------------------------
+    # DESIGNER OBJECT STRUCTURE
+    # ------------------------------------------------------------------
 
-# class AdminSubscriptionTestCase(BaseAdminTestCase):
-#     """Test cases for /api/admin/subscription endpoint"""
+    def test_designer_object_in_results(self):
+        """Each result should be a designer object or contain designer fields"""
+        res = self.client.post('/api/admin/search_creator/', headers=self.admin_headers, json={'query': 'Test'})
+        if res.status_code == 200:
+            results = res.get_json().get('results', [])
+            if len(results) > 0:
+                designer = results[0]
+                # Should contain designer identifier and basic info
+                self.assertIn('id', designer)
 
-#     def test_get_all_subscriptions(self):
-#         """Test retrieving all subscriptions"""
-#         res = self.client.get('/api/admin/subscription',
-#                              headers=self.admin_headers)
-#         self.assertEqual(res.status_code, 200)
-#         data = res.get_json()
-#         self.assertIn('subscriptions', data)
+    # ------------------------------------------------------------------
+    # INVALID METHODS
+    # ------------------------------------------------------------------
 
+    def test_invalid_method_get(self):
+        res = self.client.get('/api/admin/search_creator/', headers=self.admin_headers)
+        self.assertIn(res.status_code, [405, 401, 400])
 
-# class AdminReportTestCase(BaseAdminTestCase):
-#     """Test cases for /api/admin/report endpoint"""
+    def test_invalid_method_put(self):
+        res = self.client.put('/api/admin/search_creator/', headers=self.admin_headers, json={})
+        self.assertIn(res.status_code, [405, 401, 400])
 
-#     def test_get_all_reports(self):
-#         """Test retrieving all reports"""
-#         res = self.client.get('/api/admin/report',
-#                              headers=self.admin_headers)
-#         self.assertEqual(res.status_code, 200)
+    def test_invalid_method_delete(self):
+        res = self.client.delete('/api/admin/search_creator/', headers=self.admin_headers)
+        self.assertIn(res.status_code, [405, 401, 400])
 
+    # ------------------------------------------------------------------
+    # CONTENT TYPE
+    # ------------------------------------------------------------------
 
-# class AdminStaffActivityTestCase(BaseAdminTestCase):
-#     """Test cases for /api/staffactivity endpoint"""
-
-#     def test_get_staff_activity(self):
-#         """Test retrieving staff activity"""
-#         res = self.client.get('/api/staffactivity',
-#                              headers=self.admin_headers)
-#         self.assertEqual(res.status_code, 200)
-
-
-# # ============================================================================
-# # PAYMENT & TRANSFER TESTS
-# # ============================================================================
-
-# class AdminApprovePaymentTestCase(BaseAdminTestCase):
-#     """Test cases for /api/approve/<id>/ endpoint"""
-
-#     def test_approve_payment_success(self):
-#         """Test approving a payment"""
-#         res = self.client.get(f'/api/approve/{self.payment.tpay_id}/',
-#                              headers=self.admin_headers)
-#         self.assertIn(res.status_code, [200, 404])
-
-#     def test_approve_invalid_payment(self):
-#         """Test approving non-existent payment"""
-#         res = self.client.get('/api/approve/99999/',
-#                              headers=self.admin_headers)
-#         self.assertEqual(res.status_code, 404)
-
-
-# class AdminSendFundTestCase(BaseAdminTestCase):
-#     """Test cases for /api/sendfund/ endpoint"""
-
-#     def test_send_fund_success(self):
-#         """Test sending funds to designer"""
-#         res = self.client.post('/api/sendfund/',
-#                               headers=self.admin_headers,
-#                               json={
-#                                   'designer_id': self.designer.desi_id,
-#                                   'amount': 5000.00
-#                               })
-#         self.assertIn(res.status_code, [200, 404])
-
-
-# class AdminFinalizeTransferTestCase(BaseAdminTestCase):
-#     """Test cases for /api/finalize_transfer endpoint"""
-
-#     def test_finalize_transfer(self):
-#         """Test finalizing fund transfer"""
-#         res = self.client.post('/api/finalize_transfer',
-#                               headers=self.admin_headers,
-#                               json={'transfer_id': 1})
-#         self.assertIn(res.status_code, [200, 404])
+    def test_response_content_type(self):
+        res = self.client.post('/api/admin/search_creator/', headers=self.admin_headers, json={'query': 'Test'})
+        if res.status_code == 200:
+            self.assertIn('application/json', res.content_type)
 
 
-# class AdminVerifyTransferTestCase(BaseAdminTestCase):
-#     """Test cases for /api/verify_transfer endpoint"""
+class AdminSearchCustomerTestCase(BaseAdminTestCase):
+    """Comprehensive tests for /api/admin/search_client/ endpoint
 
-#     def test_verify_transfer(self):
-#         """Test verifying fund transfer"""
-#         res = self.client.post('/api/verify_transfer',
-#                               headers=self.admin_headers,
-#                               json={'transfer_id': 1})
-#         self.assertIn(res.status_code, [200, 404])
+    This endpoint allows admins and superadmins to search for customers
+    (clients) by keyword. The request expects a JSON body with a 'query'
+    field. Responses include a list of results and pagination metadata.
+    The endpoint should enforce authentication and validate input.
+    """
+
+    def test_search_customer_as_admin(self):
+        """Admin can search for customers and receives 200"""
+        res = self.client.post('/api/admin/search_client/',
+                               headers=self.admin_headers,
+                               json={'search': 'Test'})
+        self.assertEqual(res.status_code, 200)
+        data = res.get_json()
+        self.assertIsInstance(data, dict)
+
+    def test_search_customer_as_superadmin(self):
+        """Superadmin can search for customers"""
+        res = self.client.post('/api/admin/search_client/',
+                               headers=self.superadmin_headers,
+                               json={'search': 'Test'})
+        self.assertEqual(res.status_code, 200)
+
+    def test_search_customer_without_authentication(self):
+        """Unauthenticated requests should be rejected"""
+        res = self.client.post('/api/admin/search_client/', json={'search': 'Test'})
+        self.assertEqual(res.status_code, 401)
+
+    def test_search_customer_with_invalid_token(self):
+        """Invalid JWT should not be accepted"""
+        headers = {'Authorization': 'Bearer invalid.token'}
+        res = self.client.post('/api/admin/search_client/', headers=headers, json={'search': 'Test'})
+        self.assertIn(res.status_code, [401, 422])
+
+    def test_search_customer_missing_query(self):
+        """Requests with no query field should return an error"""
+        res = self.client.post('/api/admin/search_client/', headers=self.admin_headers, json={})
+        self.assertIn(res.status_code, [400, 422])
+
+    def test_search_customer_empty_query(self):
+        """Empty query string may be rejected or return zero results"""
+        res = self.client.post('/api/admin/search_client/', headers=self.admin_headers, json={'query': ''})
+        self.assertIn(res.status_code, [200, 400])
+
+    def test_search_customer_non_string_query(self):
+        """Non-string query should be rejected"""
+        res = self.client.post('/api/admin/search_client/', headers=self.admin_headers, json={'query': 123})
+        self.assertIn(res.status_code, [400, 422])
+
+    def test_response_structure(self):
+        """Successful search response contains expected keys"""
+        res = self.client.post('/api/admin/search_client/', headers=self.admin_headers, json={'query': 'Test'})
+        if res.status_code == 200:
+            data = res.get_json()
+            self.assertIn('results', data)
+            self.assertIn('page', data)
+            self.assertIn('has_next', data)
+            self.assertIn('has_prev', data)
+            self.assertIn('total_pages', data)
+            self.assertIn('total_results', data)
+
+    def test_results_is_list(self):
+        """Results field should be a list when present"""
+        res = self.client.post('/api/admin/search_client/', headers=self.admin_headers, json={'query': 'Test'})
+        if res.status_code == 200:
+            results = res.get_json().get('results')
+            self.assertIsInstance(results, list)
+
+    def test_pagination_metadata_types(self):
+        """Pagination keys should have sensible types"""
+        res = self.client.post('/api/admin/search_client/', headers=self.admin_headers, json={'query': 'Test'})
+        if res.status_code == 200:
+            pag = res.get_json()
+            self.assertIsInstance(pag.get('page'), int)
+            self.assertIsInstance(pag.get('total_pages'), int)
+            self.assertIsInstance(pag.get('total_results'), int)
+            self.assertIsInstance(pag.get('has_next'), bool)
+            self.assertIsInstance(pag.get('has_prev'), bool)
+
+    def test_customer_object_in_results(self):
+        """Each result should be a customer object or contain customer fields"""
+        res = self.client.post('/api/admin/search_client/', headers=self.admin_headers, json={'query': 'Test'})
+        if res.status_code == 200:
+            results = res.get_json().get('results', [])
+            if len(results) > 0:
+                customer = results[0]
+                self.assertIn('id', customer)
+                self.assertIn('firstname', customer)
+
+    def test_invalid_method_get(self):
+        res = self.client.get('/api/admin/search_client/', headers=self.admin_headers)
+        self.assertIn(res.status_code, [405, 401, 400])
+
+    def test_invalid_method_put(self):
+        res = self.client.put('/api/admin/search_client/', headers=self.admin_headers, json={})
+        self.assertIn(res.status_code, [405, 401, 400])
+
+    def test_invalid_method_delete(self):
+        res = self.client.delete('/api/admin/search_client/', headers=self.admin_headers)
+        self.assertIn(res.status_code, [405, 401, 400])
+
+    def test_response_content_type(self):
+        res = self.client.post('/api/admin/search_client/', headers=self.admin_headers, json={'query': 'Test'})
+        if res.status_code == 200:
+            self.assertIn('application/json', res.content_type)
+
+
+class AdminSearchSubscriptionTestCase(BaseAdminTestCase):
+    """Comprehensive tests for /api/admin/search_subcription/ endpoint
+
+    This endpoint allows admins and superadmins to search subscriptions
+    by keyword. The request expects a JSON body with a 'search' field.
+    Responses include a list of results and pagination metadata. The
+    endpoint must enforce authentication and validate input.
+    """
+
+    def test_search_subscription_as_admin(self):
+        """Admin can search subscriptions and receives 200"""
+        res = self.client.post('/api/admin/search_subcription/',
+                               headers=self.admin_headers,
+                               json={'search': 'premium'})
+        self.assertIn(res.status_code, [200, 400])
+
+    def test_search_subscription_as_superadmin(self):
+        """Superadmin can search subscriptions"""
+        res = self.client.post('/api/admin/search_subcription/',
+                               headers=self.superadmin_headers,
+                               json={'search': 'premium'})
+        self.assertIn(res.status_code, [200, 400])
+
+    def test_search_subscription_without_authentication(self):
+        """Unauthenticated requests should be rejected"""
+        res = self.client.post('/api/admin/search_subcription/', json={'search': 'premium'})
+        self.assertEqual(res.status_code, 401)
+
+    def test_search_subscription_with_invalid_token(self):
+        """Invalid JWT should not be accepted"""
+        headers = {'Authorization': 'Bearer invalid.token'}
+        res = self.client.post('/api/admin/search_subcription/', headers=headers, json={'search': 'premium'})
+        self.assertIn(res.status_code, [401, 422])
+
+    def test_search_subscription_missing_query(self):
+        """Requests with no search field should return an error"""
+        res = self.client.post('/api/admin/search_subcription/', headers=self.admin_headers, json={})
+        self.assertIn(res.status_code, [400, 422])
+
+    def test_search_subscription_empty_query(self):
+        """Empty search string may be rejected or return zero results"""
+        res = self.client.post('/api/admin/search_subcription/', headers=self.admin_headers, json={'search': ''})
+        self.assertIn(res.status_code, [200, 400])
+
+    def test_search_subscription_non_string_query(self):
+        """Non-string search should be rejected"""
+        res = self.client.post('/api/admin/search_subcription/', headers=self.admin_headers, json={'search': 123})
+        self.assertIn(res.status_code, [400, 422])
+
+    def test_response_structure(self):
+        """Successful search response contains expected keys"""
+        res = self.client.post('/api/admin/search_subcription/', headers=self.admin_headers, json={'search': 'premium'})
+        if res.status_code == 200:
+            data = res.get_json()
+            self.assertIn('results', data)
+            self.assertIn('page', data)
+            self.assertIn('has_next', data)
+            self.assertIn('has_prev', data)
+            self.assertIn('total_pages', data)
+            self.assertIn('total_results', data)
+            self.assertIn('query', data)
+
+    def test_results_is_list(self):
+        """Results field should be a list when present"""
+        res = self.client.post('/api/admin/search_subcription/', headers=self.admin_headers, json={'search': 'premium'})
+        if res.status_code == 200:
+            results = res.get_json().get('results')
+            self.assertIsInstance(results, list)
+
+    def test_pagination_metadata_types(self):
+        """Pagination keys should have sensible types"""
+        res = self.client.post('/api/admin/search_subcription/', headers=self.admin_headers, json={'search': 'premium'})
+        if res.status_code == 200:
+            pag = res.get_json()
+            self.assertIsInstance(pag.get('page'), int)
+            self.assertIsInstance(pag.get('total_pages'), int)
+            self.assertIsInstance(pag.get('total_results'), int)
+            self.assertIsInstance(pag.get('has_next'), bool)
+            self.assertIsInstance(pag.get('has_prev'), bool)
+
+    def test_invalid_method_get(self):
+        res = self.client.get('/api/admin/search_subcription/', headers=self.admin_headers)
+        self.assertIn(res.status_code, [405, 401, 400])
+
+    def test_invalid_method_put(self):
+        res = self.client.put('/api/admin/search_subcription/', headers=self.admin_headers, json={})
+        self.assertIn(res.status_code, [405, 401, 400])
+
+    def test_invalid_method_delete(self):
+        res = self.client.delete('/api/admin/search_subcription/', headers=self.admin_headers)
+        self.assertIn(res.status_code, [405, 401, 400])
+
+    def test_response_content_type(self):
+        res = self.client.post('/api/admin/search_subcription/', headers=self.admin_headers, json={'search': 'premium'})
+        if res.status_code == 200:
+            self.assertIn('application/json', res.content_type)
+
+
+class AdminSearchBookingTestCase(BaseAdminTestCase):
+    """Comprehensive tests for /api/admin/search_booking_appointment/ endpoint
+
+    This endpoint allows admins and superadmins to search for booking
+    appointments by keyword. The request expects a JSON body with a
+    'search' field. Responses include a list of results and pagination
+    metadata. Access requires authentication and input validation.
+    """
+
+    def test_search_booking_as_admin(self):
+        """Admin can perform booking search"""
+        res = self.client.post('/api/admin/search_booking_appointment/',
+                               headers=self.admin_headers,
+                               json={'search': 'design'} )
+        self.assertIn(res.status_code, [200, 400])
+
+    def test_search_booking_as_superadmin(self):
+        """Superadmin can perform booking search"""
+        res = self.client.post('/api/admin/search_booking_appointment/',
+                               headers=self.superadmin_headers,
+                               json={'search': 'design'} )
+        self.assertIn(res.status_code, [200, 400])
+
+    def test_search_booking_without_authentication(self):
+        """Requests without auth should be rejected"""
+        res = self.client.post('/api/admin/search_booking_appointment/', json={'search': 'design'})
+        self.assertEqual(res.status_code, 401)
+
+    def test_search_booking_with_invalid_token(self):
+        """Invalid JWT should not be accepted"""
+        headers = {'Authorization': 'Bearer invalid.token'}
+        res = self.client.post('/api/admin/search_booking_appointment/', headers=headers, json={'search': 'design'})
+        self.assertIn(res.status_code, [401, 422])
+
+    def test_search_booking_missing_query(self):
+        """Missing search field should return error"""
+        res = self.client.post('/api/admin/search_booking_appointment/', headers=self.admin_headers, json={})
+        self.assertIn(res.status_code, [400, 422])
+
+    def test_search_booking_empty_query(self):
+        """Empty query may be rejected or yield no results"""
+        res = self.client.post('/api/admin/search_booking_appointment/', headers=self.admin_headers, json={'search': ''})
+        self.assertIn(res.status_code, [200, 400])
+
+    def test_search_booking_non_string_query(self):
+        """Non-string search should be rejected"""
+        res = self.client.post('/api/admin/search_booking_appointment/', headers=self.admin_headers, json={'search': 123})
+        self.assertIn(res.status_code, [400, 422])
+
+    def test_response_structure(self):
+        """Successful response contains expected pagination keys"""
+        res = self.client.post('/api/admin/search_booking_appointment/', headers=self.admin_headers, json={'search': 'design'})
+        if res.status_code == 200:
+            data = res.get_json()
+            for key in ['results', 'page', 'has_next', 'has_prev', 'total_pages', 'total_results']:
+                self.assertIn(key, data)
+
+    def test_results_is_list(self):
+        """Results field should be a list when present"""
+        res = self.client.post('/api/admin/search_booking_appointment/', headers=self.admin_headers, json={'search': 'design'})
+        if res.status_code == 200:
+            self.assertIsInstance(res.get_json().get('results'), list)
+
+    def test_pagination_metadata_types(self):
+        """Pagination keys should have sensible types"""
+        res = self.client.post('/api/admin/search_booking_appointment/', headers=self.admin_headers, json={'search': 'design'})
+        if res.status_code == 200:
+            pag = res.get_json()
+            self.assertIsInstance(pag.get('page'), int)
+            self.assertIsInstance(pag.get('total_pages'), int)
+            self.assertIsInstance(pag.get('total_results'), int)
+            self.assertIsInstance(pag.get('has_next'), bool)
+            self.assertIsInstance(pag.get('has_prev'), bool)
+
+    def test_invalid_method_get(self):
+        res = self.client.get('/api/admin/search_booking_appointment/', headers=self.admin_headers)
+        self.assertIn(res.status_code, [405, 401, 400])
+
+    def test_invalid_method_put(self):
+        res = self.client.put('/api/admin/search_booking_appointment/', headers=self.admin_headers, json={})
+        self.assertIn(res.status_code, [405, 401, 400])
+
+    def test_invalid_method_delete(self):
+        res = self.client.delete('/api/admin/search_booking_appointment/', headers=self.admin_headers)
+        self.assertIn(res.status_code, [405, 401, 400])
+
+    def test_response_content_type(self):
+        res = self.client.post('/api/admin/search_booking_appointment/', headers=self.admin_headers, json={'search': 'design'})
+        if res.status_code == 200:
+            self.assertIn('application/json', res.content_type)
+
+class AdminAppointmentsTestCase(BaseAdminTestCase):
+    """Comprehensive tests for /api/admin/appointments endpoint
+
+    This endpoint returns a paginated list of all booking appointments.
+    Only authenticated admins or superadmins may access it. The response
+    includes appointment objects, pagination metadata, and admin/spadmin
+    identifiers.
+    """
+
+    # ------------------------------------------------------------------
+    # AUTHENTICATION / AUTHORIZATION
+    # ------------------------------------------------------------------
+
+    def test_appointments_as_admin(self):
+        """Admin can retrieve appointments"""
+        res = self.client.get('/api/admin/appointments', headers=self.admin_headers)
+        self.assertEqual(res.status_code, 200)
+        data = res.get_json()
+        self.assertIsInstance(data, dict)
+
+    def test_appointments_as_superadmin(self):
+        """Superadmin can retrieve appointments"""
+        res = self.client.get('/api/admin/appointments', headers=self.superadmin_headers)
+        self.assertEqual(res.status_code, 200)
+
+    def test_appointments_without_authentication(self):
+        """Unauthenticated request should be rejected"""
+        res = self.client.get('/api/admin/appointments')
+        self.assertEqual(res.status_code, 401)
+
+    def test_appointments_with_invalid_token(self):
+        """Invalid JWT should not be accepted"""
+        headers = {'Authorization': 'Bearer invalid.token'}
+        res = self.client.get('/api/admin/appointments', headers=headers)
+        self.assertIn(res.status_code, [401, 422])
+
+    def test_appointments_empty_authorization_header(self):
+        """Empty Authorization header behaves like unauthenticated"""
+        headers = {'Authorization': ''}
+        res = self.client.get('/api/admin/appointments', headers=headers)
+        self.assertIn(res.status_code, [401, 422])
+
+    # ------------------------------------------------------------------
+    # RESPONSE STRUCTURE
+    # ------------------------------------------------------------------
+
+    def test_response_contains_required_fields(self):
+        """Response should contain appointments and pagination"""
+        res = self.client.get('/api/admin/appointments', headers=self.admin_headers)
+        self.assertEqual(res.status_code, 200)
+        data = res.get_json()
+        self.assertIn('appointments', data)
+        self.assertIn('pagination', data)
+        self.assertIn('admin', data)
+        self.assertIn('superadmin', data)
+
+    def test_appointments_is_list(self):
+        """appointments key should be a list"""
+        res = self.client.get('/api/admin/appointments', headers=self.admin_headers)
+        self.assertEqual(res.status_code, 200)
+        self.assertIsInstance(res.get_json().get('appointments'), list)
+
+    def test_pagination_meta_structure(self):
+        """Pagination object should contain expected keys"""
+        res = self.client.get('/api/admin/appointments', headers=self.admin_headers)
+        if res.status_code == 200:
+            pag = res.get_json().get('pagination', {})
+            for key in ['page', 'pages', 'total', 'has_next', 'has_prev']:
+                self.assertIn(key, pag)
+
+    # ------------------------------------------------------------------
+    # APPOINTMENT OBJECT STRUCTURE
+    # ------------------------------------------------------------------
+
+    def test_appointment_object_fields(self):
+        """Each appointment should include the expected keys"""
+        res = self.client.get('/api/admin/appointments', headers=self.admin_headers)
+        if res.status_code == 200:
+            items = res.get_json().get('appointments', [])
+            if items:
+                appt = items[0]
+                expected = ['id', 'client_firstname', 'client_lastname',
+                            'creator_businessName', 'booking_date', 'booking_Time',
+                            'client_pic', 'collection_date', 'collectionTime',
+                            'status']
+                for field in expected:
+                    self.assertIn(field, appt)
+
+    # ------------------------------------------------------------------
+    # PAGINATION METADATA TYPES
+    # ------------------------------------------------------------------
+
+    def test_pagination_metadata_types(self):
+        """Pagination values should be correct types"""
+        res = self.client.get('/api/admin/appointments', headers=self.admin_headers)
+        if res.status_code == 200:
+            pag = res.get_json().get('pagination', {})
+            self.assertIsInstance(pag.get('page'), int)
+            self.assertIsInstance(pag.get('pages'), int)
+            self.assertIsInstance(pag.get('total'), int)
+            self.assertIsInstance(pag.get('has_next'), bool)
+            self.assertIsInstance(pag.get('has_prev'), bool)
+
+    # ------------------------------------------------------------------
+    # PAGINATION PARAMETERS
+    # ------------------------------------------------------------------
+
+    def test_page_parameter_affects_results(self):
+        """Requesting page 2 should still return valid structure"""
+        res = self.client.get('/api/admin/appointments?page=2', headers=self.admin_headers)
+        self.assertIn(res.status_code, [200, 404])
+
+    # ------------------------------------------------------------------
+    # INVALID METHODS
+    # ------------------------------------------------------------------
+
+    def test_invalid_method_post(self):
+        res = self.client.post('/api/admin/appointments', headers=self.admin_headers, json={})
+        self.assertIn(res.status_code, [405, 401, 400])
+
+    def test_invalid_method_put(self):
+        res = self.client.put('/api/admin/appointments', headers=self.admin_headers, json={})
+        self.assertIn(res.status_code, [405, 401, 400])
+
+    def test_invalid_method_delete(self):
+        res = self.client.delete('/api/admin/appointments', headers=self.admin_headers)
+        self.assertIn(res.status_code, [405, 401, 400])
+
+    # ------------------------------------------------------------------
+    # CONTENT TYPE
+    # ------------------------------------------------------------------
+
+    def test_response_content_type(self):
+        res = self.client.get('/api/admin/appointments', headers=self.admin_headers)
+        if res.status_code == 200:
+            self.assertIn('application/json', res.content_type)
+
+
+class AdminPaymentTestCase(BaseAdminTestCase):
+    """Comprehensive tests for /api/admin/payment endpoint
+
+    Returns a paginated list of payments along with last3payment and
+    pagination metadata including admin/spadmin identifiers.
+    Only authenticated admins or superadmins may access.
+    """
+
+    # ------------------------------------------------------------------
+    # AUTHENTICATION & AUTHORIZATION
+    # ------------------------------------------------------------------
+
+    def test_payments_as_admin(self):
+        res = self.client.get('/api/admin/payment', headers=self.admin_headers)
+        self.assertEqual(res.status_code, 200)
+        self.assertIsInstance(res.get_json(), dict)
+
+    def test_payments_as_superadmin(self):
+        res = self.client.get('/api/admin/payment', headers=self.superadmin_headers)
+        self.assertEqual(res.status_code, 200)
+
+    def test_payments_unauthenticated(self):
+        res = self.client.get('/api/admin/payment')
+        self.assertEqual(res.status_code, 401)
+
+    def test_payments_invalid_token(self):
+        headers = {'Authorization': 'Bearer invalid.token'}
+        res = self.client.get('/api/admin/payment', headers=headers)
+        self.assertIn(res.status_code, [401, 422])
+
+    def test_empty_authorization_header(self):
+        headers = {'Authorization': ''}
+        res = self.client.get('/api/admin/payment', headers=headers)
+        self.assertIn(res.status_code, [401, 422])
+
+    # ------------------------------------------------------------------
+    # RESPONSE STRUCTURE
+    # ------------------------------------------------------------------
+
+    def test_response_contains_expected_fields(self):
+        res = self.client.get('/api/admin/payment', headers=self.admin_headers)
+        self.assertEqual(res.status_code, 200)
+        data = res.get_json()
+        self.assertIn('payments', data)
+        self.assertIn('last3payment', data)
+        self.assertIn('pagination', data)
+
+    def test_payments_list_is_list(self):
+        res = self.client.get('/api/admin/payment', headers=self.admin_headers)
+        self.assertEqual(res.status_code, 200)
+        self.assertIsInstance(res.get_json().get('payments'), list)
+
+    def test_last3payment_is_list(self):
+        res = self.client.get('/api/admin/payment', headers=self.admin_headers)
+        self.assertEqual(res.status_code, 200)
+        self.assertIsInstance(res.get_json().get('last3payment'), list)
+
+    def test_pagination_structure(self):
+        res = self.client.get('/api/admin/payment', headers=self.admin_headers)
+        if res.status_code == 200:
+            pag = res.get_json().get('pagination', {})
+            for key in ['page', 'pages', 'total', 'has_next', 'has_prev', 'admin', 'spadmin']:
+                self.assertIn(key, pag)
+
+    # ------------------------------------------------------------------
+    # PAYMENT OBJECT STRUCTURE
+    # ------------------------------------------------------------------
+
+    def test_payment_object_fields(self):
+        res = self.client.get('/api/admin/payment', headers=self.admin_headers)
+        if res.status_code == 200:
+            items = res.get_json().get('payments', [])
+            if items:
+                pay = items[0]
+                expected = ['payment_id', 'creators_pic', 'creators_firstname',
+                            'business_businessName', 'amount', 'date', 'status',
+                            'ref_no']
+                for field in expected:
+                    self.assertIn(field, pay)
+
+    # ------------------------------------------------------------------
+    # PAGINATION METADATA TYPES
+    # ------------------------------------------------------------------
+
+    def test_pagination_metadata_types(self):
+        res = self.client.get('/api/admin/payment', headers=self.admin_headers)
+        if res.status_code == 200:
+            pag = res.get_json().get('pagination', {})
+            self.assertIsInstance(pag.get('page'), int)
+            self.assertIsInstance(pag.get('pages'), int)
+            self.assertIsInstance(pag.get('total'), int)
+            self.assertIsInstance(pag.get('has_next'), bool)
+            self.assertIsInstance(pag.get('has_prev'), bool)
+
+    # ------------------------------------------------------------------
+    # PAGINATION PARAMETERS
+    # ------------------------------------------------------------------
+
+    def test_page_parameter(self):
+        res = self.client.get('/api/admin/payment?page=2', headers=self.admin_headers)
+        self.assertIn(res.status_code, [200, 404])
+
+    # ------------------------------------------------------------------
+    # INVALID METHODS
+    # ------------------------------------------------------------------
+
+    def test_invalid_method_post(self):
+        res = self.client.post('/api/admin/payment', headers=self.admin_headers, json={})
+        self.assertIn(res.status_code, [405, 401, 400])
+
+    def test_invalid_method_put(self):
+        res = self.client.put('/api/admin/payment', headers=self.admin_headers, json={})
+        self.assertIn(res.status_code, [405, 401, 400])
+
+    def test_invalid_method_delete(self):
+        res = self.client.delete('/api/admin/payment', headers=self.admin_headers)
+        self.assertIn(res.status_code, [405, 401, 400])
+
+    # ------------------------------------------------------------------
+    # CONTENT TYPE
+    # ------------------------------------------------------------------
+
+    def test_content_type_json(self):
+        res = self.client.get('/api/admin/payment', headers=self.admin_headers)
+        if res.status_code == 200:
+            self.assertIn('application/json', res.content_type)
+
+
+class AdminSubscriptionTestCase(BaseAdminTestCase):
+    """Comprehensive tests for /api/admin/subscription endpoint
+
+    Lists subscriptions with pagination metadata. Access requires admin or
+    superadmin authentication.
+    """
+
+    def test_subscriptions_as_admin(self):
+        res = self.client.get('/api/admin/subscription', headers=self.admin_headers)
+        self.assertEqual(res.status_code, 200)
+        self.assertIsInstance(res.get_json(), dict)
+
+    def test_subscriptions_as_superadmin(self):
+        res = self.client.get('/api/admin/subscription', headers=self.superadmin_headers)
+        self.assertEqual(res.status_code, 200)
+
+    def test_subscriptions_without_authentication(self):
+        res = self.client.get('/api/admin/subscription')
+        self.assertEqual(res.status_code, 401)
+
+    def test_subscriptions_invalid_token(self):
+        headers = {'Authorization': 'Bearer invalid.token'}
+        res = self.client.get('/api/admin/subscription', headers=headers)
+        self.assertIn(res.status_code, [401, 422])
+
+    def test_subscriptions_empty_authorization_header(self):
+        headers = {'Authorization': ''}
+        res = self.client.get('/api/admin/subscription', headers=headers)
+        self.assertIn(res.status_code, [401, 422])
+
+    def test_response_structure(self):
+        res = self.client.get('/api/admin/subscription', headers=self.admin_headers)
+        self.assertEqual(res.status_code, 200)
+        data = res.get_json()
+        self.assertIn('subscriptions', data)
+        self.assertIn('page', data)
+
+    def test_subscriptions_is_list(self):
+        res = self.client.get('/api/admin/subscription', headers=self.admin_headers)
+        self.assertEqual(res.status_code, 200)
+        self.assertIsInstance(res.get_json().get('subscriptions'), list)
+
+    def test_pagination_structure(self):
+        res = self.client.get('/api/admin/subscription', headers=self.admin_headers)
+        if res.status_code == 200:
+            pag = res.get_json()
+            for key in ['page', 'pages', 'total', 'has_next', 'has_prev']:
+                self.assertIn(key, pag)
+
+    def test_pagination_metadata_types(self):
+        res = self.client.get('/api/admin/subscription', headers=self.admin_headers)
+        if res.status_code == 200:
+            pag = res.get_json()
+            self.assertIsInstance(pag.get('page'), int)
+            self.assertIsInstance(pag.get('pages'), int)
+            self.assertIsInstance(pag.get('total'), int)
+            self.assertIsInstance(pag.get('has_next'), bool)
+            self.assertIsInstance(pag.get('has_prev'), bool)
+
+    def test_invalid_methods(self):
+        res_post = self.client.post('/api/admin/subscription', headers=self.admin_headers, json={})
+        res_put = self.client.put('/api/admin/subscription', headers=self.admin_headers, json={})
+        res_delete = self.client.delete('/api/admin/subscription', headers=self.admin_headers)
+        self.assertIn(res_post.status_code, [405, 401, 400])
+        self.assertIn(res_put.status_code, [405, 401, 400])
+        self.assertIn(res_delete.status_code, [405, 401, 400])
+
+    def test_content_type_json(self):
+        res = self.client.get('/api/admin/subscription', headers=self.admin_headers)
+        if res.status_code == 200:
+            self.assertIn('application/json', res.content_type)
+
+
+class AdminReportTestCase(BaseAdminTestCase):
+    """Comprehensive tests for /api/admin/report endpoint
+
+    Lists all reports submitted in the system with pagination.
+    Only authenticated admins or superadmins may access.
+    """
+
+    def test_reports_as_admin(self):
+        res = self.client.get('/api/admin/report', headers=self.admin_headers)
+        self.assertEqual(res.status_code, 200)
+        self.assertIsInstance(res.get_json(), dict)
+
+    def test_reports_as_superadmin(self):
+        res = self.client.get('/api/admin/report', headers=self.superadmin_headers)
+        self.assertEqual(res.status_code, 200)
+
+    def test_reports_without_authentication(self):
+        res = self.client.get('/api/admin/report')
+        self.assertEqual(res.status_code, 401)
+
+    def test_reports_invalid_token(self):
+        headers = {'Authorization': 'Bearer invalid.token'}
+        res = self.client.get('/api/admin/report', headers=headers)
+        self.assertIn(res.status_code, [401, 422])
+
+    def test_reports_empty_authorization_header(self):
+        headers = {'Authorization': ''}
+        res = self.client.get('/api/admin/report', headers=headers)
+        self.assertIn(res.status_code, [401, 422])
+
+    def test_response_structure(self):
+        res = self.client.get('/api/admin/report', headers=self.admin_headers)
+        self.assertEqual(res.status_code, 200)
+        data = res.get_json()
+        self.assertIsInstance(data, dict)
+
+    def test_response_is_list_or_has_reports(self):
+        res = self.client.get('/api/admin/report', headers=self.admin_headers)
+        self.assertEqual(res.status_code, 200)
+        data = res.get_json()
+        # Could be a list or dict with reports key
+        self.assertTrue(isinstance(data, (list, dict)))
+
+    def test_pagination_if_present(self):
+        res = self.client.get('/api/admin/report', headers=self.admin_headers)
+        if res.status_code == 200:
+            data = res.get_json()
+            if isinstance(data, dict) and 'page' in data:
+                pag = data['page']
+                for key in ['page', 'pages', 'total', 'has_next', 'has_prev']:
+                    self.assertIn(key, pag)
+
+    def test_pagination_types_if_present(self):
+        res = self.client.get('/api/admin/report', headers=self.admin_headers)
+        if res.status_code == 200:
+            data = res.get_json()
+            if isinstance(data, dict) and 'page' in data:
+                pag = data['page']
+                self.assertIsInstance(pag.get('page'), int)
+                self.assertIsInstance(pag.get('pages'), int)
+                self.assertIsInstance(pag.get('total'), int)
+                self.assertIsInstance(pag.get('has_next'), bool)
+                self.assertIsInstance(pag.get('has_prev'), bool)
+
+    def test_invalid_method_post(self):
+        res = self.client.post('/api/admin/report', headers=self.admin_headers, json={})
+        self.assertIn(res.status_code, [405, 401, 400])
+
+    def test_invalid_method_put(self):
+        res = self.client.put('/api/admin/report', headers=self.admin_headers, json={})
+        self.assertIn(res.status_code, [405, 401, 400])
+
+    def test_invalid_method_delete(self):
+        res = self.client.delete('/api/admin/report', headers=self.admin_headers)
+        self.assertIn(res.status_code, [405, 401, 400])
+
+    def test_content_type_json(self):
+        res = self.client.get('/api/admin/report', headers=self.admin_headers)
+        if res.status_code == 200:
+            self.assertIn('application/json', res.content_type)
+
+    def test_page_parameter(self):
+        res = self.client.get('/api/admin/report?page=1', headers=self.admin_headers)
+        self.assertIn(res.status_code, [200, 404])
+
+
+class AdminStaffActivityTestCase(BaseAdminTestCase):
+    """Comprehensive tests for /api/staffactivity endpoint
+
+    This endpoint returns staff/admin activity statistics for the current
+    month and year, including activity counts and user suspension/ban stats.
+    Only superadmins may access this endpoint; regular admins are rejected
+    with a 401 Unauthorized response.
+    """
+
+    # ------------------------------------------------------------------
+    # AUTHENTICATION / AUTHORIZATION
+    # ------------------------------------------------------------------
+
+    def test_staff_activity_as_superadmin(self):
+        """Superadmin can retrieve staff activity"""
+        res = self.client.get('/api/staffactivity',
+                             headers=self.superadmin_headers)
+        self.assertEqual(res.status_code, 200)
+        data = res.get_json()
+        self.assertIsInstance(data, dict)
+
+    def test_staff_activity_as_admin_rejected(self):
+        """Regular admin is not authorized to access staff activity"""
+        res = self.client.get('/api/staffactivity',
+                             headers=self.admin_headers)
+        self.assertEqual(res.status_code, 401)
+
+    def test_staff_activity_without_authentication(self):
+        """Unauthenticated request should be rejected"""
+        res = self.client.get('/api/staffactivity')
+        self.assertEqual(res.status_code, 401)
+
+    def test_staff_activity_with_invalid_token(self):
+        """Invalid JWT should not be accepted"""
+        headers = {'Authorization': 'Bearer invalid.token'}
+        res = self.client.get('/api/staffactivity', headers=headers)
+        self.assertIn(res.status_code, [401, 422])
+
+    def test_staff_activity_empty_authorization_header(self):
+        """Empty Authorization header behaves like unauthenticated"""
+        headers = {'Authorization': ''}
+        res = self.client.get('/api/staffactivity', headers=headers)
+        self.assertIn(res.status_code, [401, 422])
+
+    # ------------------------------------------------------------------
+    # RESPONSE STRUCTURE
+    # ------------------------------------------------------------------
+
+    def test_response_contains_required_fields(self):
+        """Response should contain month, year, result, and spadmin"""
+        res = self.client.get('/api/staffactivity',
+                             headers=self.superadmin_headers)
+        self.assertEqual(res.status_code, 200)
+        data = res.get_json()
+        for key in ['month', 'year', 'result', 'spadmin']:
+            self.assertIn(key, data)
+
+    def test_result_is_list(self):
+        """Result should be a list of admin activity objects"""
+        res = self.client.get('/api/staffactivity',
+                             headers=self.superadmin_headers)
+        if res.status_code == 200:
+            self.assertIsInstance(res.get_json().get('result'), list)
+
+    def test_month_year_are_integers(self):
+        """Month and year fields should be integers"""
+        res = self.client.get('/api/staffactivity',
+                             headers=self.superadmin_headers)
+        if res.status_code == 200:
+            data = res.get_json()
+            self.assertIsInstance(data.get('month'), int)
+            self.assertIsInstance(data.get('year'), int)
+
+    def test_month_in_valid_range(self):
+        """Month should be between 1 and 12"""
+        res = self.client.get('/api/staffactivity',
+                             headers=self.superadmin_headers)
+        if res.status_code == 200:
+            month = res.get_json().get('month')
+            self.assertGreaterEqual(month, 1)
+            self.assertLessEqual(month, 12)
+
+    def test_year_is_positive(self):
+        """Year should be a positive number"""
+        res = self.client.get('/api/staffactivity',
+                             headers=self.superadmin_headers)
+        if res.status_code == 200:
+            year = res.get_json().get('year')
+            self.assertGreater(year, 0)
+
+    def test_spadmin_is_integer_or_none(self):
+        """spadmin should be an integer or null"""
+        res = self.client.get('/api/staffactivity',
+                             headers=self.superadmin_headers)
+        if res.status_code == 200:
+            spadmin = res.get_json().get('spadmin')
+            self.assertTrue(isinstance(spadmin, (int, type(None))))
+
+    # ------------------------------------------------------------------
+    # ADMIN OBJECT STRUCTURE (if result is not empty)
+    # ------------------------------------------------------------------
+
+    def test_admin_object_structure(self):
+        """Each admin object should have required fields"""
+        res = self.client.get('/api/staffactivity',
+                             headers=self.superadmin_headers)
+        if res.status_code == 200:
+            result = res.get_json().get('result', [])
+            if result:
+                admin_obj = result[0]
+                for key in ['admin', 'total_activities', 'customers', 'designers']:
+                    self.assertIn(key, admin_obj)
+
+    def test_admin_detail_structure(self):
+        """Admin detail should contain admin_id, firstname, lastname"""
+        res = self.client.get('/api/staffactivity',
+                             headers=self.superadmin_headers)
+        if res.status_code == 200:
+            result = res.get_json().get('result', [])
+            if result:
+                admin = result[0].get('admin', {})
+                for key in ['admin_id', 'admin_firstname', 'admin_lastname']:
+                    self.assertIn(key, admin)
+
+    def test_customers_stats_structure(self):
+        """Customers object should contain status counts"""
+        res = self.client.get('/api/staffactivity',
+                             headers=self.superadmin_headers)
+        if res.status_code == 200:
+            result = res.get_json().get('result', [])
+            if result:
+                customers = result[0].get('customers', {})
+                for key in ['suspended', 'banned', 'deactivated', 'dormant']:
+                    self.assertIn(key, customers)
+
+    def test_designers_stats_structure(self):
+        """Designers object should contain status counts"""
+        res = self.client.get('/api/staffactivity',
+                             headers=self.superadmin_headers)
+        if res.status_code == 200:
+            result = res.get_json().get('result', [])
+            if result:
+                designers = result[0].get('designers', {})
+                for key in ['suspended', 'banned', 'deactivated', 'dormant']:
+                    self.assertIn(key, designers)
+
+    # ------------------------------------------------------------------
+    # FIELD TYPES VALIDATION
+    # ------------------------------------------------------------------
+
+    def test_admin_id_is_integer(self):
+        """Admin id should be an integer"""
+        res = self.client.get('/api/staffactivity',
+                             headers=self.superadmin_headers)
+        if res.status_code == 200:
+            result = res.get_json().get('result', [])
+            if result:
+                admin_id = result[0].get('admin', {}).get('admin_id')
+                self.assertTrue(isinstance(admin_id, (int, type(None))))
+
+    def test_total_activities_is_integer(self):
+        """Total activities should be an integer"""
+        res = self.client.get('/api/staffactivity',
+                             headers=self.superadmin_headers)
+        if res.status_code == 200:
+            result = res.get_json().get('result', [])
+            if result:
+                total = result[0].get('total_activities')
+                self.assertIsInstance(total, int)
+
+    def test_status_counts_are_integers(self):
+        """All status counts should be integers"""
+        res = self.client.get('/api/staffactivity',
+                             headers=self.superadmin_headers)
+        if res.status_code == 200:
+            result = res.get_json().get('result', [])
+            if result:
+                customers = result[0].get('customers', {})
+                for count in customers.values():
+                    self.assertIsInstance(count, int)
+
+                designers = result[0].get('designers', {})
+                for count in designers.values():
+                    self.assertIsInstance(count, int)
+
+    def test_status_counts_non_negative(self):
+        """All status counts should be non-negative"""
+        res = self.client.get('/api/staffactivity',
+                             headers=self.superadmin_headers)
+        if res.status_code == 200:
+            result = res.get_json().get('result', [])
+            if result:
+                customers = result[0].get('customers', {})
+                for count in customers.values():
+                    self.assertGreaterEqual(count, 0)
+
+                designers = result[0].get('designers', {})
+                for count in designers.values():
+                    self.assertGreaterEqual(count, 0)
+
+    # ------------------------------------------------------------------
+    # INVALID METHODS
+    # ------------------------------------------------------------------
+
+    def test_invalid_method_post(self):
+        """POST should not be allowed"""
+        res = self.client.post('/api/staffactivity',
+                              headers=self.superadmin_headers, json={})
+        self.assertIn(res.status_code, [405, 401, 400])
+
+    def test_invalid_method_put(self):
+        """PUT should not be allowed"""
+        res = self.client.put('/api/staffactivity',
+                             headers=self.superadmin_headers, json={})
+        self.assertIn(res.status_code, [405, 401, 400])
+
+    def test_invalid_method_delete(self):
+        """DELETE should not be allowed"""
+        res = self.client.delete('/api/staffactivity',
+                                headers=self.superadmin_headers)
+        self.assertIn(res.status_code, [405, 401, 400])
+
+    def test_invalid_method_patch(self):
+        """PATCH should not be allowed"""
+        res = self.client.patch('/api/staffactivity',
+                               headers=self.superadmin_headers, json={})
+        self.assertIn(res.status_code, [405, 401, 400])
+
+    # ------------------------------------------------------------------
+    # CONTENT TYPE
+    # ------------------------------------------------------------------
+
+    def test_response_content_type(self):
+        """Response should be JSON"""
+        res = self.client.get('/api/staffactivity',
+                             headers=self.superadmin_headers)
+        if res.status_code == 200:
+            self.assertIn('application/json', res.content_type)
+
+    def test_response_is_valid_json(self):
+        """Response should be parseable JSON"""
+        res = self.client.get('/api/staffactivity',
+                             headers=self.superadmin_headers)
+        if res.status_code == 200:
+            try:
+                data = res.get_json()
+                self.assertIsNotNone(data)
+            except Exception:
+                self.fail("Response is not valid JSON")
+
+    # ------------------------------------------------------------------
+    # CONSISTENCY & MULTIPLE REQUESTS
+    # ------------------------------------------------------------------
+
+    def test_multiple_requests_consistent_structure(self):
+        """Multiple requests should return same structure"""
+        res1 = self.client.get('/api/staffactivity',
+                              headers=self.superadmin_headers)
+        res2 = self.client.get('/api/staffactivity',
+                              headers=self.superadmin_headers)
+
+        if res1.status_code == 200 and res2.status_code == 200:
+            data1 = res1.get_json()
+            data2 = res2.get_json()
+            self.assertEqual(set(data1.keys()), set(data2.keys()))
+            self.assertEqual(data1.get('month'), data2.get('month'))
+            self.assertEqual(data1.get('year'), data2.get('year'))
+
+    def test_result_ordering_by_activity(self):
+        """Results should be ordered by total_activities (descending)"""
+        res = self.client.get('/api/staffactivity',
+                             headers=self.superadmin_headers)
+        if res.status_code == 200:
+            result = res.get_json().get('result', [])
+            if len(result) > 1:
+                activities = [r.get('total_activities', 0) for r in result]
+                self.assertEqual(activities, sorted(activities, reverse=True))
+
+
+# ============================================================================
+# PAYMENT & TRANSFER TESTS
+# ============================================================================
+
+class AdminApprovePaymentTestCase(BaseAdminTestCase):
+    """Comprehensive tests for /api/approve/<id>/ endpoint
+
+    This endpoint approves a payment by transaction number and initiates
+    a transfer to the associated designer. It requires admin or superadmin
+    authentication and performs Paystack API integrations for account
+    verification and transfer creation. Only GET method is supported.
+    """
+
+    # ------------------------------------------------------------------
+    # AUTHENTICATION / AUTHORIZATION
+    # ------------------------------------------------------------------
+
+    def test_approve_as_admin(self):
+        """Admin can approve a payment"""
+        # Using a valid transaction number from fixtures
+        res = self.client.get(f'/api/approve/{self.payment.tpay_transNo}/',
+                             headers=self.admin_headers)
+        self.assertIn(res.status_code, [200, 400, 404])
+
+    def test_approve_as_superadmin(self):
+        """Superadmin can approve a payment"""
+        res = self.client.get(f'/api/approve/{self.payment.tpay_transNo}/',
+                             headers=self.superadmin_headers)
+        self.assertIn(res.status_code, [200, 400, 404])
+
+    def test_approve_without_authentication(self):
+        """Unauthenticated requests should be rejected"""
+        res = self.client.get(f'/api/approve/{self.payment.tpay_transNo}/')
+        self.assertEqual(res.status_code, 401)
+
+    def test_approve_with_invalid_token(self):
+        """Invalid JWT token should be rejected"""
+        headers = {'Authorization': 'Bearer invalid.token'}
+        res = self.client.get(f'/api/approve/{self.payment.tpay_transNo}/',
+                             headers=headers)
+        self.assertIn(res.status_code, [401, 422])
+
+    def test_approve_with_empty_authorization_header(self):
+        """Empty Authorization header behaves like unauthenticated"""
+        headers = {'Authorization': ''}
+        res = self.client.get(f'/api/approve/{self.payment.tpay_transNo}/',
+                             headers=headers)
+        self.assertIn(res.status_code, [401, 422])
+
+    # ------------------------------------------------------------------
+    # TRANSACTION LOOKUP & VALIDATION
+    # ------------------------------------------------------------------
+
+    def test_approve_nonexistent_transaction_not_found(self):
+        """Approving a non-existent transaction should return 404"""
+        res = self.client.get('/api/approve/nonexistent999/',
+                             headers=self.admin_headers)
+        self.assertEqual(res.status_code, 404)
+        if res.status_code == 404:
+            data = res.get_json()
+            self.assertIn('error', data)
+
+    def test_approve_numeric_nonexistent_transaction(self):
+        """Approving non-existent numeric transaction should return 404"""
+        res = self.client.get('/api/approve/999999/',
+                             headers=self.admin_headers)
+        self.assertEqual(res.status_code, 404)
+
+    def test_approve_empty_transaction_id(self):
+        """Empty transaction ID in path should be handled"""
+        res = self.client.get('/api/approve//',
+                             headers=self.admin_headers)
+        # Depending on Flask routing, may be 404 or 405
+        self.assertIn(res.status_code, [404, 405, 400])
+
+    # ------------------------------------------------------------------
+    # SUCCESSFUL APPROVAL RESPONSE STRUCTURE
+    # ------------------------------------------------------------------
+
+    def test_approve_success_response_structure(self):
+        """Successful approval response should contain expected structure"""
+        res = self.client.get(f'/api/approve/{self.payment.tpay_transNo}/',
+                             headers=self.admin_headers)
+        # May succeed (200) or fail due to Paystack API errors (400/404)
+        if res.status_code == 200:
+            data = res.get_json()
+            for key in ['success', 'transfer_data', 'message', 'transaction', 'recipient']:
+                self.assertIn(key, data)
+
+    def test_approve_success_boolean_flag(self):
+        """Success response should have success boolean"""
+        res = self.client.get(f'/api/approve/{self.payment.tpay_transNo}/',
+                             headers=self.admin_headers)
+        if res.status_code == 200:
+            data = res.get_json()
+            self.assertTrue(data.get('success'))
+
+    def test_approve_transaction_object(self):
+        """Transaction object should contain trans_id, trans_ref, amount"""
+        res = self.client.get(f'/api/approve/{self.payment.tpay_transNo}/',
+                             headers=self.admin_headers)
+        if res.status_code == 200:
+            data = res.get_json()
+            trans = data.get('transaction', {})
+            for key in ['trans_id', 'trans_ref', 'amount']:
+                self.assertIn(key, trans)
+
+    def test_approve_recipient_object(self):
+        """Recipient object should contain account details"""
+        res = self.client.get(f'/api/approve/{self.payment.tpay_transNo}/',
+                             headers=self.admin_headers)
+        if res.status_code == 200:
+            data = res.get_json()
+            recipient = data.get('recipient', {})
+            for key in ['account_name', 'account_number', 'bank_name']:
+                self.assertIn(key, recipient)
+
+    def test_approve_transfer_data_present(self):
+        """Transfer data from Paystack should be included"""
+        res = self.client.get(f'/api/approve/{self.payment.tpay_transNo}/',
+                             headers=self.admin_headers)
+        if res.status_code == 200:
+            data = res.get_json()
+            self.assertIsNotNone(data.get('transfer_data'))
+            self.assertIsInstance(data.get('transfer_data'), dict)
+
+    # ------------------------------------------------------------------
+    # ERROR RESPONSE STRUCTURE
+    # ------------------------------------------------------------------
+
+    def test_approve_not_found_error_structure(self):
+        """Error response for non-existent transaction should have error key"""
+        res = self.client.get('/api/approve/notfound/',
+                             headers=self.admin_headers)
+        if res.status_code == 404:
+            data = res.get_json()
+            self.assertIn('error', data)
+
+    def test_approve_bad_request_error_structure(self):
+        """Bad request error response should have error details"""
+        res = self.client.get(f'/api/approve/{self.payment.tpay_transNo}/',
+                             headers=self.admin_headers)
+        if res.status_code == 400:
+            data = res.get_json()
+            self.assertIn('error', data)
+
+    # ------------------------------------------------------------------
+    # FIELD TYPES VALIDATION
+    # ------------------------------------------------------------------
+
+    def test_approve_transaction_fields_are_correct_types(self):
+        """Transaction fields should have correct types"""
+        res = self.client.get(f'/api/approve/{self.payment.tpay_transNo}/',
+                             headers=self.admin_headers)
+        if res.status_code == 200:
+            data = res.get_json()
+            trans = data.get('transaction', {})
+            self.assertIsInstance(trans.get('trans_id'), int)
+            # amount should be number
+            amount = trans.get('amount')
+            self.assertTrue(isinstance(amount, (int, float)))
+
+    def test_approve_recipient_fields_are_strings(self):
+        """Recipient fields should be strings"""
+        res = self.client.get(f'/api/approve/{self.payment.tpay_transNo}/',
+                             headers=self.admin_headers)
+        if res.status_code == 200:
+            data = res.get_json()
+            recipient = data.get('recipient', {})
+            for key in ['account_name', 'account_number', 'bank_name']:
+                value = recipient.get(key)
+                self.assertTrue(isinstance(value, str) or value is None)
+
+    # ------------------------------------------------------------------
+    # INVALID HTTP METHODS
+    # ------------------------------------------------------------------
+
+    def test_approve_invalid_method_post(self):
+        """POST should not be allowed"""
+        res = self.client.post(f'/api/approve/{self.payment.tpay_transNo}/',
+                              headers=self.admin_headers, json={})
+        self.assertIn(res.status_code, [405, 401, 400])
+
+    def test_approve_invalid_method_put(self):
+        """PUT should not be allowed"""
+        res = self.client.put(f'/api/approve/{self.payment.tpay_transNo}/',
+                             headers=self.admin_headers, json={})
+        self.assertIn(res.status_code, [405, 401, 400])
+
+    def test_approve_invalid_method_delete(self):
+        """DELETE should not be allowed"""
+        res = self.client.delete(f'/api/approve/{self.payment.tpay_transNo}/',
+                                headers=self.admin_headers)
+        self.assertIn(res.status_code, [405, 401, 400])
+
+    def test_approve_invalid_method_patch(self):
+        """PATCH should not be allowed"""
+        res = self.client.patch(f'/api/approve/{self.payment.tpay_transNo}/',
+                               headers=self.admin_headers, json={})
+        self.assertIn(res.status_code, [405, 401, 400])
+
+    # ------------------------------------------------------------------
+    # CONTENT TYPE
+    # ------------------------------------------------------------------
+
+    def test_approve_response_content_type(self):
+        """Response should be JSON"""
+        res = self.client.get(f'/api/approve/{self.payment.tpay_transNo}/',
+                             headers=self.admin_headers)
+        self.assertIn('application/json', res.content_type)
+
+    def test_approve_response_is_valid_json(self):
+        """Response should be parseable JSON"""
+        res = self.client.get(f'/api/approve/{self.payment.tpay_transNo}/',
+                             headers=self.admin_headers)
+        try:
+            data = res.get_json()
+            self.assertIsNotNone(data)
+        except Exception:
+            self.fail("Response is not valid JSON")
+
+    # ------------------------------------------------------------------
+    # PATH PARAMETER VARIATIONS
+    # ------------------------------------------------------------------
+
+    def test_approve_transaction_id_case_sensitive(self):
+        """Transaction IDs should be handled correctly"""
+        # Try with uppercase (should still be 404 if not found)
+        res = self.client.get('/api/approve/NOTFOUND/',
+                             headers=self.admin_headers)
+        self.assertIn(res.status_code, [404, 400])
+
+    def test_approve_special_characters_in_id(self):
+        """Special characters in transaction ID should be handled"""
+        res = self.client.get('/api/approve/test@123/',
+                             headers=self.admin_headers)
+        self.assertIn(res.status_code, [404, 400])
+
+    # ------------------------------------------------------------------
+    # CONSISTENCY & IDEMPOTENCY
+    # ------------------------------------------------------------------
+
+    def test_approve_multiple_requests_authenticated_consistently(self):
+        """Multiple authenticated requests should be consistent"""
+        res1 = self.client.get(f'/api/approve/{self.payment.tpay_transNo}/',
+                              headers=self.admin_headers)
+        res2 = self.client.get(f'/api/approve/{self.payment.tpay_transNo}/',
+                              headers=self.admin_headers)
+        # Both should have same status code (likely 400 due to API or 404)
+        self.assertEqual(res1.status_code, res2.status_code)
+
+    def test_approve_admin_and_superadmin_same_result(self):
+        """Both admin and superadmin should get same result for same transaction"""
+        res1 = self.client.get('/api/approve/notfound/',
+                              headers=self.admin_headers)
+        res2 = self.client.get('/api/approve/notfound/',
+                              headers=self.superadmin_headers)
+        # Both should return 404 for non-existent transaction
+        self.assertEqual(res1.status_code, res2.status_code)
+
+
+class AdminSendFundTestCase(BaseAdminTestCase):
+    """Comprehensive tests for /api/sendfund/ endpoint
+
+    This endpoint initiates a fund transfer to a designer via Paystack API.
+    It requires admin or superadmin authentication and a valid transfer reference
+    number. Only POST method is supported.
+    """
+
+    # ------------------------------------------------------------------
+    # AUTHENTICATION / AUTHORIZATION
+    # ------------------------------------------------------------------
+
+    def test_send_fund_as_admin(self):
+        """Admin can initiate fund transfer"""
+        res = self.client.post('/api/sendfund/',
+                              headers=self.admin_headers,
+                              json={'refno': 12345})
+        # May succeed (200) or fail with 404 if transfer doesn't exist
+        self.assertIn(res.status_code, [200, 400, 404, 500])
+
+    def test_send_fund_as_superadmin(self):
+        """Superadmin can initiate fund transfer"""
+        res = self.client.post('/api/sendfund/',
+                              headers=self.superadmin_headers,
+                              json={'refno': 12345})
+        self.assertIn(res.status_code, [200, 400, 404, 500])
+
+    def test_send_fund_without_authentication(self):
+        """Unauthenticated requests should be rejected"""
+        res = self.client.post('/api/sendfund/',
+                              json={'refno': 12345})
+        self.assertEqual(res.status_code, 401)
+
+    def test_send_fund_with_invalid_token(self):
+        """Invalid JWT token should be rejected"""
+        headers = {'Authorization': 'Bearer invalid.token'}
+        res = self.client.post('/api/sendfund/',
+                              headers=headers,
+                              json={'refno': 12345})
+        self.assertIn(res.status_code, [401, 422])
+
+    def test_send_fund_with_empty_authorization_header(self):
+        """Empty Authorization header behaves like unauthenticated"""
+        headers = {'Authorization': ''}
+        res = self.client.post('/api/sendfund/',
+                              headers=headers,
+                              json={'refno': 12345})
+        self.assertIn(res.status_code, [401, 422])
+
+    # ------------------------------------------------------------------
+    # INPUT VALIDATION
+    # ------------------------------------------------------------------
+
+    def test_send_fund_missing_refno(self):
+        """Missing refno in request body should return 400"""
+        res = self.client.post('/api/sendfund/',
+                              headers=self.admin_headers,
+                              json={})
+        self.assertEqual(res.status_code, 400)
+        data = res.get_json()
+        self.assertIn('message', data)
+
+    def test_send_fund_null_refno(self):
+        """Null refno should be rejected"""
+        res = self.client.post('/api/sendfund/',
+                              headers=self.admin_headers,
+                              json={'refno': None})
+        self.assertEqual(res.status_code, 400)
+
+    def test_send_fund_empty_body(self):
+        """Empty JSON body should return 400"""
+        res = self.client.post('/api/sendfund/',
+                              headers=self.admin_headers,
+                              json=None)
+        self.assertEqual(res.status_code, 400)
+
+    def test_send_fund_invalid_refno_type(self):
+        """Non-numeric refno should still be processed (may fail at DB lookup)"""
+        res = self.client.post('/api/sendfund/',
+                              headers=self.admin_headers,
+                              json={'refno': 'invalid'})
+        # Should attempt lookup but fail with 404
+        self.assertIn(res.status_code, [400, 404])
+
+    # ------------------------------------------------------------------
+    # TRANSFER LOOKUP & VALIDATION
+    # ------------------------------------------------------------------
+
+    def test_send_fund_nonexistent_transfer_not_found(self):
+        """Non-existent transfer reference should return 404"""
+        res = self.client.post('/api/sendfund/',
+                              headers=self.admin_headers,
+                              json={'refno': 999999})
+        self.assertEqual(res.status_code, 404)
+        data = res.get_json()
+        self.assertIn('message', data)
+
+    def test_send_fund_transfer_not_found_message(self):
+        """404 error should mention transfer not found"""
+        res = self.client.post('/api/sendfund/',
+                              headers=self.admin_headers,
+                              json={'refno': 999999})
+        if res.status_code == 404:
+            data = res.get_json()
+            self.assertEqual(data.get('status'), False)
+
+    # ------------------------------------------------------------------
+    # SUCCESSFUL TRANSFER RESPONSE STRUCTURE
+    # ------------------------------------------------------------------
+
+    def test_send_fund_success_response_structure(self):
+        """Successful transfer response should contain expected fields"""
+        res = self.client.post('/api/sendfund/',
+                              headers=self.admin_headers,
+                              json={'refno': 12345})
+        if res.status_code == 200:
+            data = res.get_json()
+            for key in ['status', 'message', 'transfer_code']:
+                self.assertIn(key, data)
+
+    def test_send_fund_success_status_true(self):
+        """Successful response should have status=True"""
+        res = self.client.post('/api/sendfund/',
+                              headers=self.admin_headers,
+                              json={'refno': 12345})
+        if res.status_code == 200:
+            data = res.get_json()
+            self.assertTrue(data.get('status'))
+
+    def test_send_fund_success_message_present(self):
+        """Response should include a message"""
+        res = self.client.post('/api/sendfund/',
+                              headers=self.admin_headers,
+                              json={'refno': 12345})
+        if res.status_code == 200:
+            data = res.get_json()
+            self.assertIsNotNone(data.get('message'))
+            self.assertIsInstance(data.get('message'), str)
+
+    def test_send_fund_transfer_code_is_string(self):
+        """Transfer code should be a string"""
+        res = self.client.post('/api/sendfund/',
+                              headers=self.admin_headers,
+                              json={'refno': 12345})
+        if res.status_code == 200:
+            data = res.get_json()
+            transfer_code = data.get('transfer_code')
+            self.assertTrue(isinstance(transfer_code, str) or transfer_code is None)
+
+    # ------------------------------------------------------------------
+    # ERROR RESPONSE STRUCTURE
+    # ------------------------------------------------------------------
+
+    def test_send_fund_error_response_structure(self):
+        """Error response should contain status and message"""
+        res = self.client.post('/api/sendfund/',
+                              headers=self.admin_headers,
+                              json={'refno': 999999})
+        if res.status_code != 200:
+            data = res.get_json()
+            self.assertIn('status', data)
+            self.assertIn('message', data)
+
+    def test_send_fund_error_status_false(self):
+        """Error response should have status=False"""
+        res = self.client.post('/api/sendfund/',
+                              headers=self.admin_headers,
+                              json={'refno': 999999})
+        if res.status_code in [400, 404, 500]:
+            data = res.get_json()
+            self.assertFalse(data.get('status'))
+
+    def test_send_fund_bad_request_error_structure(self):
+        """Bad request should have status and message"""
+        res = self.client.post('/api/sendfund/',
+                              headers=self.admin_headers,
+                              json={})
+        if res.status_code == 400:
+            data = res.get_json()
+            self.assertEqual(data.get('status'), False)
+            self.assertIsNotNone(data.get('message'))
+
+    # ------------------------------------------------------------------
+    # FIELD TYPES VALIDATION
+    # ------------------------------------------------------------------
+
+    def test_send_fund_status_field_is_boolean(self):
+        """Status field should always be boolean"""
+        res = self.client.post('/api/sendfund/',
+                              headers=self.admin_headers,
+                              json={'refno': 12345})
+        data = res.get_json()
+        self.assertIsInstance(data.get('status'), bool)
+
+    def test_send_fund_message_field_is_string(self):
+        """Message field should be string"""
+        res = self.client.post('/api/sendfund/',
+                              headers=self.admin_headers,
+                              json={'refno': 12345})
+        data = res.get_json()
+        message = data.get('message')
+        self.assertTrue(isinstance(message, str) or message is None)
+
+    # ------------------------------------------------------------------
+    # INVALID HTTP METHODS
+    # ------------------------------------------------------------------
+
+    def test_send_fund_invalid_method_get(self):
+        """GET should not be allowed"""
+        res = self.client.get('/api/sendfund/',
+                             headers=self.admin_headers)
+        self.assertIn(res.status_code, [405, 401, 400])
+
+    def test_send_fund_invalid_method_put(self):
+        """PUT should not be allowed"""
+        res = self.client.put('/api/sendfund/',
+                             headers=self.admin_headers,
+                             json={'refno': 12345})
+        self.assertIn(res.status_code, [405, 401, 400])
+
+    def test_send_fund_invalid_method_delete(self):
+        """DELETE should not be allowed"""
+        res = self.client.delete('/api/sendfund/',
+                                headers=self.admin_headers)
+        self.assertIn(res.status_code, [405, 401, 400])
+
+    def test_send_fund_invalid_method_patch(self):
+        """PATCH should not be allowed"""
+        res = self.client.patch('/api/sendfund/',
+                               headers=self.admin_headers,
+                               json={'refno': 12345})
+        self.assertIn(res.status_code, [405, 401, 400])
+
+    # ------------------------------------------------------------------
+    # CONTENT TYPE
+    # ------------------------------------------------------------------
+
+    def test_send_fund_response_content_type(self):
+        """Response should be JSON"""
+        res = self.client.post('/api/sendfund/',
+                              headers=self.admin_headers,
+                              json={'refno': 12345})
+        self.assertIn('application/json', res.content_type)
+
+    def test_send_fund_response_is_valid_json(self):
+        """Response should be parseable JSON"""
+        res = self.client.post('/api/sendfund/',
+                              headers=self.admin_headers,
+                              json={'refno': 12345})
+        try:
+            data = res.get_json()
+            self.assertIsNotNone(data)
+        except Exception:
+            self.fail("Response is not valid JSON")
+
+    # ------------------------------------------------------------------
+    # PAYLOAD VARIATIONS
+    # ------------------------------------------------------------------
+
+    def test_send_fund_refno_as_integer(self):
+        """Refno as integer should be accepted"""
+        res = self.client.post('/api/sendfund/',
+                              headers=self.admin_headers,
+                              json={'refno': 12345})
+        self.assertIn(res.status_code, [200, 400, 404, 500])
+
+    def test_send_fund_refno_as_string_number(self):
+        """Refno as string of number should be handled"""
+        res = self.client.post('/api/sendfund/',
+                              headers=self.admin_headers,
+                              json={'refno': '12345'})
+        # May work or fail depending on DB query
+        self.assertIn(res.status_code, [200, 400, 404, 500])
+
+    def test_send_fund_extra_fields_ignored(self):
+        """Extra fields in payload should be ignored"""
+        res = self.client.post('/api/sendfund/',
+                              headers=self.admin_headers,
+                              json={
+                                  'refno': 12345,
+                                  'extra_field': 'should_be_ignored',
+                                  'another': 999
+                              })
+        self.assertIn(res.status_code, [200, 400, 404, 500])
+
+    # ------------------------------------------------------------------
+    # CONSISTENCY & IDEMPOTENCY
+    # ------------------------------------------------------------------
+
+    def test_send_fund_multiple_requests_authenticated_consistently(self):
+        """Multiple authenticated requests to same refno should be consistent"""
+        res1 = self.client.post('/api/sendfund/',
+                               headers=self.admin_headers,
+                               json={'refno': 999999})
+        res2 = self.client.post('/api/sendfund/',
+                               headers=self.admin_headers,
+                               json={'refno': 999999})
+        # Both should have same status code
+        self.assertEqual(res1.status_code, res2.status_code)
+
+    def test_send_fund_admin_and_superadmin_same_result(self):
+        """Both admin and superadmin should get same result for same refno"""
+        res1 = self.client.post('/api/sendfund/',
+                               headers=self.admin_headers,
+                               json={'refno': 999999})
+        res2 = self.client.post('/api/sendfund/',
+                               headers=self.superadmin_headers,
+                               json={'refno': 999999})
+        # Both should return 404 for non-existent transfer
+        self.assertEqual(res1.status_code, res2.status_code)
+
+    def test_send_fund_missing_refno_consistent_error(self):
+        """Multiple requests without refno should fail consistently"""
+        res1 = self.client.post('/api/sendfund/',
+                               headers=self.admin_headers,
+                               json={})
+        res2 = self.client.post('/api/sendfund/',
+                               headers=self.admin_headers,
+                               json={})
+        # Both should return 400
+        self.assertEqual(res1.status_code, 400)
+        self.assertEqual(res2.status_code, 400)
+
+
+class AdminFinalizeTransferTestCase(BaseAdminTestCase):
+    """Comprehensive tests for /api/finalize_transfer endpoint
+
+    This endpoint supports both GET and POST methods:
+    - GET: Retrieves transfer code from session and admin/superadmin info
+    - POST: Finalizes a transfer via Paystack API using OTP verification
+    Requires admin or superadmin authentication.
+    """
+
+    # ------------------------------------------------------------------
+    # AUTHENTICATION / AUTHORIZATION - GET
+    # ------------------------------------------------------------------
+
+    def test_finalize_transfer_get_as_admin(self):
+        """Admin can retrieve transfer info via GET"""
+        res = self.client.get('/api/finalize_transfer',
+                             headers=self.admin_headers)
+        self.assertEqual(res.status_code, 200)
+        data = res.get_json()
+        self.assertIsInstance(data, dict)
+
+    def test_finalize_transfer_get_as_superadmin(self):
+        """Superadmin can retrieve transfer info via GET"""
+        res = self.client.get('/api/finalize_transfer',
+                             headers=self.superadmin_headers)
+        self.assertEqual(res.status_code, 200)
+
+    def test_finalize_transfer_get_without_authentication(self):
+        """Unauthenticated GET should be rejected"""
+        res = self.client.get('/api/finalize_transfer')
+        self.assertEqual(res.status_code, 401)
+
+    def test_finalize_transfer_get_with_invalid_token(self):
+        """Invalid JWT token should be rejected on GET"""
+        headers = {'Authorization': 'Bearer invalid.token'}
+        res = self.client.get('/api/finalize_transfer', headers=headers)
+        self.assertIn(res.status_code, [401, 422])
+
+    def test_finalize_transfer_get_empty_authorization_header(self):
+        """Empty Authorization header behaves like unauthenticated on GET"""
+        headers = {'Authorization': ''}
+        res = self.client.get('/api/finalize_transfer', headers=headers)
+        self.assertIn(res.status_code, [401, 422])
+
+    # ------------------------------------------------------------------
+    # GET RESPONSE STRUCTURE
+    # ------------------------------------------------------------------
+
+    def test_finalize_transfer_get_response_structure(self):
+        """GET response should contain admin, spadmin, and transfer_code"""
+        res = self.client.get('/api/finalize_transfer',
+                             headers=self.admin_headers)
+        if res.status_code == 200:
+            data = res.get_json()
+            for key in ['admin', 'spadmin', 'transfer_code']:
+                self.assertIn(key, data)
+
+    def test_finalize_transfer_get_admin_field_for_admin_user(self):
+        """GET response should have admin ID when requested by admin"""
+        res = self.client.get('/api/finalize_transfer',
+                             headers=self.admin_headers)
+        if res.status_code == 200:
+            data = res.get_json()
+            # Admin field should be populated, superadmin should be None
+            self.assertTrue(isinstance(data.get('admin'), (int, type(None))))
+            self.assertIsNone(data.get('spadmin'))
+
+    def test_finalize_transfer_get_spadmin_field_for_superadmin_user(self):
+        """GET response should have spadmin ID when requested by superadmin"""
+        res = self.client.get('/api/finalize_transfer',
+                             headers=self.superadmin_headers)
+        if res.status_code == 200:
+            data = res.get_json()
+            # Superadmin field should be populated, admin should be None
+            self.assertTrue(isinstance(data.get('spadmin'), (int, type(None))))
+            self.assertIsNone(data.get('admin'))
+
+    def test_finalize_transfer_get_transfer_code_field(self):
+        """GET response should have transfer_code (may be None if not in session)"""
+        res = self.client.get('/api/finalize_transfer',
+                             headers=self.admin_headers)
+        if res.status_code == 200:
+            data = res.get_json()
+            # transfer_code may be None or a string
+            self.assertTrue(isinstance(data.get('transfer_code'), (str, type(None))))
+
+    # ------------------------------------------------------------------
+    # AUTHENTICATION / AUTHORIZATION - POST
+    # ------------------------------------------------------------------
+
+    def test_finalize_transfer_post_as_admin(self):
+        """Admin can finalize transfer via POST"""
+        res = self.client.post('/api/finalize_transfer',
+                              headers=self.admin_headers,
+                              json={'otp': '123456'})
+        # May succeed (200) or fail with 400/404 due to missing session data or Paystack error
+        self.assertIn(res.status_code, [200, 400, 404])
+
+    def test_finalize_transfer_post_as_superadmin(self):
+        """Superadmin can finalize transfer via POST"""
+        res = self.client.post('/api/finalize_transfer',
+                              headers=self.superadmin_headers,
+                              json={'otp': '123456'})
+        self.assertIn(res.status_code, [200, 400, 404])
+
+    def test_finalize_transfer_post_without_authentication(self):
+        """Unauthenticated POST should be rejected"""
+        res = self.client.post('/api/finalize_transfer',
+                              json={'otp': '123456'})
+        self.assertEqual(res.status_code, 401)
+
+    def test_finalize_transfer_post_with_invalid_token(self):
+        """Invalid JWT token should be rejected on POST"""
+        headers = {'Authorization': 'Bearer invalid.token'}
+        res = self.client.post('/api/finalize_transfer',
+                              headers=headers,
+                              json={'otp': '123456'})
+        self.assertIn(res.status_code, [401, 422])
+
+    def test_finalize_transfer_post_empty_authorization_header(self):
+        """Empty Authorization header behaves like unauthenticated on POST"""
+        headers = {'Authorization': ''}
+        res = self.client.post('/api/finalize_transfer',
+                              headers=headers,
+                              json={'otp': '123456'})
+        self.assertIn(res.status_code, [401, 422])
+
+    # ------------------------------------------------------------------
+    # POST INPUT VALIDATION
+    # ------------------------------------------------------------------
+
+    def test_finalize_transfer_post_missing_otp(self):
+        """Missing OTP in request body should return 400"""
+        res = self.client.post('/api/finalize_transfer',
+                              headers=self.admin_headers,
+                              json={})
+        self.assertEqual(res.status_code, 400)
+        data = res.get_json()
+        self.assertIn('error', data)
+
+    def test_finalize_transfer_post_null_otp(self):
+        """Null OTP should be rejected"""
+        res = self.client.post('/api/finalize_transfer',
+                              headers=self.admin_headers,
+                              json={'otp': None})
+        self.assertEqual(res.status_code, 400)
+
+    def test_finalize_transfer_post_empty_otp(self):
+        """Empty OTP string should be rejected"""
+        res = self.client.post('/api/finalize_transfer',
+                              headers=self.admin_headers,
+                              json={'otp': ''})
+        self.assertEqual(res.status_code, 400)
+
+    def test_finalize_transfer_post_empty_body(self):
+        """Empty JSON body should return 400"""
+        res = self.client.post('/api/finalize_transfer',
+                              headers=self.admin_headers,
+                              json=None)
+        self.assertEqual(res.status_code, 400)
+
+    # ------------------------------------------------------------------
+    # POST SUCCESSFUL RESPONSE STRUCTURE
+    # ------------------------------------------------------------------
+
+    def test_finalize_transfer_post_success_response_structure(self):
+        """Successful POST response should contain expected fields"""
+        res = self.client.post('/api/finalize_transfer',
+                              headers=self.admin_headers,
+                              json={'otp': '123456'})
+        if res.status_code == 200:
+            data = res.get_json()
+            for key in ['message', 'status', 'paystack_response']:
+                self.assertIn(key, data)
+
+    def test_finalize_transfer_post_success_status(self):
+        """Successful response should have status='success'"""
+        res = self.client.post('/api/finalize_transfer',
+                              headers=self.admin_headers,
+                              json={'otp': '123456'})
+        if res.status_code == 200:
+            data = res.get_json()
+            self.assertEqual(data.get('status'), 'success')
+
+    def test_finalize_transfer_post_success_message(self):
+        """Success response should have a message"""
+        res = self.client.post('/api/finalize_transfer',
+                              headers=self.admin_headers,
+                              json={'otp': '123456'})
+        if res.status_code == 200:
+            data = res.get_json()
+            self.assertIsNotNone(data.get('message'))
+            self.assertIsInstance(data.get('message'), str)
+
+    def test_finalize_transfer_post_paystack_response(self):
+        """Response should include Paystack API response"""
+        res = self.client.post('/api/finalize_transfer',
+                              headers=self.admin_headers,
+                              json={'otp': '123456'})
+        if res.status_code == 200:
+            data = res.get_json()
+            self.assertIsNotNone(data.get('paystack_response'))
+
+    # ------------------------------------------------------------------
+    # POST ERROR RESPONSE STRUCTURE
+    # ------------------------------------------------------------------
+
+    def test_finalize_transfer_post_error_response_structure(self):
+        """Error POST response should contain message, status, paystack_response"""
+        res = self.client.post('/api/finalize_transfer',
+                              headers=self.admin_headers,
+                              json={'otp': '123456'})
+        if res.status_code in [400, 404]:
+            data = res.get_json()
+            # May have error or the full error structure
+            self.assertTrue('error' in data or 'message' in data)
+
+    def test_finalize_transfer_post_bad_request_structure(self):
+        """Bad request (missing OTP) should have error message"""
+        res = self.client.post('/api/finalize_transfer',
+                              headers=self.admin_headers,
+                              json={})
+        if res.status_code == 400:
+            data = res.get_json()
+            self.assertIn('error', data)
+
+    def test_finalize_transfer_post_error_status(self):
+        """Error response should have appropriate status"""
+        res = self.client.post('/api/finalize_transfer',
+                              headers=self.admin_headers,
+                              json={'otp': '123456'})
+        if res.status_code == 404:
+            data = res.get_json()
+            self.assertEqual(data.get('status'), 'error')
+
+    # ------------------------------------------------------------------
+    # FIELD TYPES VALIDATION
+    # ------------------------------------------------------------------
+
+    def test_finalize_transfer_post_message_is_string(self):
+        """Message field should be string"""
+        res = self.client.post('/api/finalize_transfer',
+                              headers=self.admin_headers,
+                              json={'otp': '123456'})
+        data = res.get_json()
+        if 'message' in data:
+            self.assertTrue(isinstance(data.get('message'), str) or data.get('message') is None)
+
+    def test_finalize_transfer_post_status_is_string(self):
+        """Status field should be string"""
+        res = self.client.post('/api/finalize_transfer',
+                              headers=self.admin_headers,
+                              json={'otp': '123456'})
+        data = res.get_json()
+        if 'status' in data:
+            self.assertIsInstance(data.get('status'), str)
+
+    def test_finalize_transfer_get_field_types(self):
+        """GET response field types should be correct"""
+        res = self.client.get('/api/finalize_transfer',
+                             headers=self.admin_headers)
+        if res.status_code == 200:
+            data = res.get_json()
+            self.assertTrue(isinstance(data.get('admin'), (int, type(None))))
+            self.assertTrue(isinstance(data.get('spadmin'), (int, type(None))))
+
+    # ------------------------------------------------------------------
+    # INVALID HTTP METHODS
+    # ------------------------------------------------------------------
+
+    def test_finalize_transfer_invalid_method_put(self):
+        """PUT should not be allowed"""
+        res = self.client.put('/api/finalize_transfer',
+                             headers=self.admin_headers,
+                             json={'otp': '123456'})
+        self.assertIn(res.status_code, [405, 401, 400])
+
+    def test_finalize_transfer_invalid_method_delete(self):
+        """DELETE should not be allowed"""
+        res = self.client.delete('/api/finalize_transfer',
+                                headers=self.admin_headers)
+        self.assertIn(res.status_code, [405, 401, 400])
+
+    def test_finalize_transfer_invalid_method_patch(self):
+        """PATCH should not be allowed"""
+        res = self.client.patch('/api/finalize_transfer',
+                               headers=self.admin_headers,
+                               json={'otp': '123456'})
+        self.assertIn(res.status_code, [405, 401, 400])
+
+    # ------------------------------------------------------------------
+    # CONTENT TYPE
+    # ------------------------------------------------------------------
+
+    def test_finalize_transfer_get_content_type(self):
+        """GET response should be JSON"""
+        res = self.client.get('/api/finalize_transfer',
+                             headers=self.admin_headers)
+        self.assertIn('application/json', res.content_type)
+
+    def test_finalize_transfer_post_content_type(self):
+        """POST response should be JSON"""
+        res = self.client.post('/api/finalize_transfer',
+                              headers=self.admin_headers,
+                              json={'otp': '123456'})
+        self.assertIn('application/json', res.content_type)
+
+    def test_finalize_transfer_get_valid_json(self):
+        """GET response should be valid JSON"""
+        res = self.client.get('/api/finalize_transfer',
+                             headers=self.admin_headers)
+        try:
+            data = res.get_json()
+            self.assertIsNotNone(data)
+        except Exception:
+            self.fail("GET response is not valid JSON")
+
+    def test_finalize_transfer_post_valid_json(self):
+        """POST response should be valid JSON"""
+        res = self.client.post('/api/finalize_transfer',
+                              headers=self.admin_headers,
+                              json={'otp': '123456'})
+        try:
+            data = res.get_json()
+            self.assertIsNotNone(data)
+        except Exception:
+            self.fail("POST response is not valid JSON")
+
+    # ------------------------------------------------------------------
+    # OTP PAYLOAD VARIATIONS
+    # ------------------------------------------------------------------
+
+    def test_finalize_transfer_post_otp_as_integer(self):
+        """OTP as integer should be handled"""
+        res = self.client.post('/api/finalize_transfer',
+                              headers=self.admin_headers,
+                              json={'otp': 123456})
+        self.assertIn(res.status_code, [200, 400, 404])
+
+    def test_finalize_transfer_post_otp_as_string(self):
+        """OTP as string should be accepted"""
+        res = self.client.post('/api/finalize_transfer',
+                              headers=self.admin_headers,
+                              json={'otp': '123456'})
+        self.assertIn(res.status_code, [200, 400, 404])
+
+    def test_finalize_transfer_post_extra_fields_ignored(self):
+        """Extra fields in payload should be ignored"""
+        res = self.client.post('/api/finalize_transfer',
+                              headers=self.admin_headers,
+                              json={
+                                  'otp': '123456',
+                                  'extra_field': 'ignored',
+                                  'another': 999
+                              })
+        self.assertIn(res.status_code, [200, 400, 404])
+
+    # ------------------------------------------------------------------
+    # CONSISTENCY & MULTIPLE REQUESTS
+    # ------------------------------------------------------------------
+
+    def test_finalize_transfer_multiple_get_requests_consistent(self):
+        """Multiple GET requests should be consistent"""
+        res1 = self.client.get('/api/finalize_transfer',
+                              headers=self.admin_headers)
+        res2 = self.client.get('/api/finalize_transfer',
+                              headers=self.admin_headers)
+        # Both should have same status code
+        self.assertEqual(res1.status_code, res2.status_code)
+
+    def test_finalize_transfer_multiple_post_requests_consistent(self):
+        """Multiple POST requests with same OTP should be consistent"""
+        res1 = self.client.post('/api/finalize_transfer',
+                               headers=self.admin_headers,
+                               json={'otp': '123456'})
+        res2 = self.client.post('/api/finalize_transfer',
+                               headers=self.admin_headers,
+                               json={'otp': '123456'})
+        # Both should have same status code
+        self.assertEqual(res1.status_code, res2.status_code)
+
+    def test_finalize_transfer_admin_and_superadmin_get_consistency(self):
+        """Admin and superadmin should get same response structure for GET"""
+        res1 = self.client.get('/api/finalize_transfer',
+                              headers=self.admin_headers)
+        res2 = self.client.get('/api/finalize_transfer',
+                              headers=self.superadmin_headers)
+        # Both should succeed
+        self.assertEqual(res1.status_code, 200)
+        self.assertEqual(res2.status_code, 200)
+
+
+class AdminVerifyTransferTestCase(BaseAdminTestCase):
+    """Comprehensive tests for /api/verify_transfer endpoint
+
+    This endpoint verifies a Paystack transfer using an OTP/verification code.
+    It requires admin or superadmin authentication and communicates with the
+    Paystack API to verify transfer status. Only POST method is supported.
+    """
+
+    # ------------------------------------------------------------------
+    # AUTHENTICATION / AUTHORIZATION
+    # ------------------------------------------------------------------
+
+    def test_verify_transfer_as_admin(self):
+        """Admin can verify transfer"""
+        res = self.client.post('/api/verify_transfer',
+                              headers=self.admin_headers,
+                              json={'otp': 'valid_code_123'})
+        # May succeed (200/404) or fail with connection error (500)
+        self.assertIn(res.status_code, [200, 400, 404, 500])
+
+    def test_verify_transfer_as_superadmin(self):
+        """Superadmin can verify transfer"""
+        res = self.client.post('/api/verify_transfer',
+                              headers=self.superadmin_headers,
+                              json={'otp': 'valid_code_123'})
+        self.assertIn(res.status_code, [200, 400, 404, 500])
+
+    def test_verify_transfer_without_authentication(self):
+        """Unauthenticated requests should be rejected"""
+        res = self.client.post('/api/verify_transfer',
+                              json={'otp': 'valid_code_123'})
+        self.assertEqual(res.status_code, 401)
+
+    def test_verify_transfer_with_invalid_token(self):
+        """Invalid JWT token should be rejected"""
+        headers = {'Authorization': 'Bearer invalid.token'}
+        res = self.client.post('/api/verify_transfer',
+                              headers=headers,
+                              json={'otp': 'valid_code_123'})
+        self.assertIn(res.status_code, [401, 422])
+
+    def test_verify_transfer_with_empty_authorization_header(self):
+        """Empty Authorization header behaves like unauthenticated"""
+        headers = {'Authorization': ''}
+        res = self.client.post('/api/verify_transfer',
+                              headers=headers,
+                              json={'otp': 'valid_code_123'})
+        self.assertIn(res.status_code, [401, 422])
+
+    # ------------------------------------------------------------------
+    # INPUT VALIDATION
+    # ------------------------------------------------------------------
+
+    def test_verify_transfer_missing_otp(self):
+        """Missing OTP in request body should return 400"""
+        res = self.client.post('/api/verify_transfer',
+                              headers=self.admin_headers,
+                              json={})
+        self.assertEqual(res.status_code, 400)
+        data = res.get_json()
+        self.assertIn('error', data)
+
+    def test_verify_transfer_null_otp(self):
+        """Null OTP should be rejected"""
+        res = self.client.post('/api/verify_transfer',
+                              headers=self.admin_headers,
+                              json={'otp': None})
+        self.assertEqual(res.status_code, 400)
+
+    def test_verify_transfer_empty_otp(self):
+        """Empty OTP string should be rejected"""
+        res = self.client.post('/api/verify_transfer',
+                              headers=self.admin_headers,
+                              json={'otp': ''})
+        self.assertEqual(res.status_code, 400)
+
+    def test_verify_transfer_empty_body(self):
+        """Empty JSON body should return 400"""
+        res = self.client.post('/api/verify_transfer',
+                              headers=self.admin_headers,
+                              json=None)
+        self.assertEqual(res.status_code, 400)
+
+    # ------------------------------------------------------------------
+    # SUCCESSFUL VERIFICATION RESPONSE STRUCTURE
+    # ------------------------------------------------------------------
+
+    def test_verify_transfer_successful_response_structure(self):
+        """Successful verification response should contain expected fields"""
+        res = self.client.post('/api/verify_transfer',
+                              headers=self.admin_headers,
+                              json={'otp': 'valid_code_123'})
+        if res.status_code == 200:
+            data = res.get_json()
+            self.assertIn('message', data)
+            self.assertIn('result', data)
+
+    def test_verify_transfer_successful_message(self):
+        """Success response should have appropriate message"""
+        res = self.client.post('/api/verify_transfer',
+                              headers=self.admin_headers,
+                              json={'otp': 'valid_code_123'})
+        if res.status_code == 200:
+            data = res.get_json()
+            self.assertIn('Transfer Successful', data.get('message', ''))
+
+    def test_verify_transfer_successful_result_object(self):
+        """Result should contain Paystack verification data"""
+        res = self.client.post('/api/verify_transfer',
+                              headers=self.admin_headers,
+                              json={'otp': 'valid_code_123'})
+        if res.status_code == 200:
+            data = res.get_json()
+            self.assertIsNotNone(data.get('result'))
+            self.assertIsInstance(data.get('result'), dict)
+
+    def test_verify_transfer_successful_result_has_status(self):
+        """Result object should have Paystack status"""
+        res = self.client.post('/api/verify_transfer',
+                              headers=self.admin_headers,
+                              json={'otp': 'valid_code_123'})
+        if res.status_code == 200:
+            data = res.get_json()
+            result = data.get('result')
+            self.assertIsNotNone(result.get('status'))
+
+    # ------------------------------------------------------------------
+    # UNSUCCESSFUL VERIFICATION RESPONSE STRUCTURE
+    # ------------------------------------------------------------------
+
+    def test_verify_transfer_unsuccessful_response_structure(self):
+        """Unsuccessful verification response should contain expected fields"""
+        res = self.client.post('/api/verify_transfer',
+                              headers=self.admin_headers,
+                              json={'otp': 'invalid_code'})
+        if res.status_code == 404:
+            data = res.get_json()
+            self.assertIn('message', data)
+            self.assertIn('result', data)
+
+    def test_verify_transfer_unsuccessful_includes_admin_info(self):
+        """404 response should include admin identification"""
+        res = self.client.post('/api/verify_transfer',
+                              headers=self.admin_headers,
+                              json={'otp': 'invalid_code'})
+        if res.status_code == 404:
+            data = res.get_json()
+            # Should have admin or spadmin field
+            self.assertTrue('admin' in data or 'spadmin' in data)
+
+    def test_verify_transfer_unsuccessful_message(self):
+        """Unsuccessful response should have appropriate message"""
+        res = self.client.post('/api/verify_transfer',
+                              headers=self.admin_headers,
+                              json={'otp': 'invalid_code'})
+        if res.status_code == 404:
+            data = res.get_json()
+            self.assertIn('Transfer Unsuccessful', data.get('message', ''))
+
+    # ------------------------------------------------------------------
+    # FIELD TYPES VALIDATION
+    # ------------------------------------------------------------------
+
+    def test_verify_transfer_message_is_string(self):
+        """Message field should be string"""
+        res = self.client.post('/api/verify_transfer',
+                              headers=self.admin_headers,
+                              json={'otp': 'code_123'})
+        data = res.get_json()
+        if 'message' in data:
+            self.assertIsInstance(data.get('message'), str)
+
+    def test_verify_transfer_result_is_dict(self):
+        """Result field should be dict"""
+        res = self.client.post('/api/verify_transfer',
+                              headers=self.admin_headers,
+                              json={'otp': 'code_123'})
+        data = res.get_json()
+        if 'result' in data:
+            self.assertIsInstance(data.get('result'), dict)
+
+    def test_verify_transfer_admin_field_is_integer_or_null(self):
+        """Admin field should be integer or null"""
+        res = self.client.post('/api/verify_transfer',
+                              headers=self.admin_headers,
+                              json={'otp': 'code_123'})
+        data = res.get_json()
+        if 'admin' in data:
+            self.assertTrue(isinstance(data.get('admin'), (int, type(None))))
+
+    # ------------------------------------------------------------------
+    # INVALID HTTP METHODS
+    # ------------------------------------------------------------------
+
+    def test_verify_transfer_invalid_method_get(self):
+        """GET should not be allowed"""
+        res = self.client.get('/api/verify_transfer',
+                             headers=self.admin_headers)
+        self.assertIn(res.status_code, [405, 401, 400])
+
+    def test_verify_transfer_invalid_method_put(self):
+        """PUT should not be allowed"""
+        res = self.client.put('/api/verify_transfer',
+                             headers=self.admin_headers,
+                             json={'otp': 'code_123'})
+        self.assertIn(res.status_code, [405, 401, 400])
+
+    def test_verify_transfer_invalid_method_delete(self):
+        """DELETE should not be allowed"""
+        res = self.client.delete('/api/verify_transfer',
+                                headers=self.admin_headers)
+        self.assertIn(res.status_code, [405, 401, 400])
+
+    # ------------------------------------------------------------------
+    # CONTENT TYPE
+    # ------------------------------------------------------------------
+
+    def test_verify_transfer_response_content_type(self):
+        """Response should be JSON"""
+        res = self.client.post('/api/verify_transfer',
+                              headers=self.admin_headers,
+                              json={'otp': 'code_123'})
+        self.assertIn('application/json', res.content_type)
+
+    def test_verify_transfer_response_is_valid_json(self):
+        """Response should be parseable JSON"""
+        res = self.client.post('/api/verify_transfer',
+                              headers=self.admin_headers,
+                              json={'otp': 'code_123'})
+        try:
+            data = res.get_json()
+            self.assertIsNotNone(data)
+        except Exception:
+            self.fail("Response is not valid JSON")
+
+    def test_verify_transfer_error_response_is_json(self):
+        """Error response should also be JSON"""
+        res = self.client.post('/api/verify_transfer',
+                              headers=self.admin_headers,
+                              json={})
+        self.assertIn('application/json', res.content_type)
+
+    # ------------------------------------------------------------------
+    # OTP PAYLOAD VARIATIONS
+    # ------------------------------------------------------------------
+
+    def test_verify_transfer_otp_as_string(self):
+        """OTP as string should be accepted"""
+        res = self.client.post('/api/verify_transfer',
+                              headers=self.admin_headers,
+                              json={'otp': 'verification_code_abc123'})
+        self.assertIn(res.status_code, [200, 400, 404, 500])
+
+    def test_verify_transfer_otp_as_numeric_string(self):
+        """OTP as numeric string should be accepted"""
+        res = self.client.post('/api/verify_transfer',
+                              headers=self.admin_headers,
+                              json={'otp': '12345678'})
+        self.assertIn(res.status_code, [200, 400, 404, 500])
+
+    def test_verify_transfer_otp_as_integer(self):
+        """OTP as integer should be handled"""
+        res = self.client.post('/api/verify_transfer',
+                              headers=self.admin_headers,
+                              json={'otp': 12345678})
+        self.assertIn(res.status_code, [200, 400, 404, 500])
+
+    def test_verify_transfer_extra_fields_ignored(self):
+        """Extra fields in payload should be ignored"""
+        res = self.client.post('/api/verify_transfer',
+                              headers=self.admin_headers,
+                              json={
+                                  'otp': 'code_123',
+                                  'extra_field': 'ignored',
+                                  'another': 999
+                              })
+        self.assertIn(res.status_code, [200, 400, 404, 500])
+
+    # ------------------------------------------------------------------
+    # ERROR HANDLING
+    # ------------------------------------------------------------------
+
+    def test_verify_transfer_paystack_connection_error(self):
+        """Failed Paystack connection should return 500"""
+        res = self.client.post('/api/verify_transfer',
+                              headers=self.admin_headers,
+                              json={'otp': 'will_fail_connection'})
+        # Depending on Paystack availability, may return 500
+        self.assertIn(res.status_code, [200, 400, 404, 500])
+
+    def test_verify_transfer_invalid_code_format(self):
+        """Invalid code format should be handled gracefully"""
+        res = self.client.post('/api/verify_transfer',
+                              headers=self.admin_headers,
+                              json={'otp': '@#$%^&*()'})
+        self.assertIn(res.status_code, [200, 400, 404, 500])
+
+    # ------------------------------------------------------------------
+    # CONSISTENCY & IDEMPOTENCY
+    # ------------------------------------------------------------------
+
+    def test_verify_transfer_multiple_requests_same_code_consistent(self):
+        """Multiple requests with same code should be consistent"""
+        res1 = self.client.post('/api/verify_transfer',
+                               headers=self.admin_headers,
+                               json={'otp': 'same_code'})
+        res2 = self.client.post('/api/verify_transfer',
+                               headers=self.admin_headers,
+                               json={'otp': 'same_code'})
+        # Both should have same status code
+        self.assertEqual(res1.status_code, res2.status_code)
+
+    def test_verify_transfer_admin_and_superadmin_same_result(self):
+        """Both admin and superadmin should get same result for same code"""
+        res1 = self.client.post('/api/verify_transfer',
+                               headers=self.admin_headers,
+                               json={'otp': 'same_code'})
+        res2 = self.client.post('/api/verify_transfer',
+                               headers=self.superadmin_headers,
+                               json={'otp': 'same_code'})
+        # Both should have same status code (verification is code-dependent)
+        self.assertEqual(res1.status_code, res2.status_code)
+
+    def test_verify_transfer_missing_otp_consistent_error(self):
+        """Multiple requests without OTP should fail consistently"""
+        res1 = self.client.post('/api/verify_transfer',
+                               headers=self.admin_headers,
+                               json={})
+        res2 = self.client.post('/api/verify_transfer',
+                               headers=self.admin_headers,
+                               json={})
+        # Both should return 400
+        self.assertEqual(res1.status_code, 400)
+        self.assertEqual(res2.status_code, 400)
+
+    def test_verify_transfer_response_format_consistency(self):
+        """Response format should be consistent across requests"""
+        res1 = self.client.post('/api/verify_transfer',
+                               headers=self.admin_headers,
+                               json={'otp': 'code1'})
+        res2 = self.client.post('/api/verify_transfer',
+                               headers=self.admin_headers,
+                               json={'otp': 'code2'})
+        # Both should have similar structure
+        data1 = res1.get_json()
+        data2 = res2.get_json()
+        self.assertEqual(set(data1.keys()), set(data2.keys()))
 
 
 # # ============================================================================

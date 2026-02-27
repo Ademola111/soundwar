@@ -1465,12 +1465,12 @@ def admin_search_api():
     spa = db.session.get(Superadmin, spadmin)
     
     
-    data = request.get_json()
+    data = request.json.get('search')
         
     if not data:
         return jsonify({'error': 'Search query required'}), 400
 
-    if not isinstance(data['search'], str):
+    if not isinstance(data, str):
         return jsonify({'error': 'Search query must be string'}), 400
     
     word = data.get('search', '').strip()
@@ -1533,11 +1533,25 @@ def api_adminsearch_designer():
     else:
         admin = None
         spadmin = userid
+    
     last_admin_active(userid, user_type)
     adm = db.session.get(Admin, admin)
     spa = db.session.get(Superadmin, spadmin)
 
     word=request.json.get('search')
+
+    # Missing query
+    if word is None:
+        return jsonify({"error": "Query field is required"}), 400
+    
+    # Not a string
+    if not isinstance(word, str):
+        return jsonify({"error": "Query must be a string"}), 400
+    
+    # Empty string
+    if word.strip() == "":
+        return jsonify({"error": "Query cannot be empty"}), 400
+    
     # print("This is word under search post", word)
     page = request.args.get('page', 1, type=int)  # Get page number from query params
 
@@ -1625,6 +1639,19 @@ def api_adminsearch_customer():
     spa = db.session.get(Superadmin, spadmin)
 
     word=request.json.get('search')
+
+    # Missing query
+    if word is None:
+        return jsonify({"error": "Query field is required"}), 400
+    
+    # Not a string
+    if not isinstance(word, str):
+        return jsonify({"error": "Query must be a string"}), 400
+    
+    # Empty string
+    if word.strip() == "":
+        return jsonify({"error": "Query cannot be empty"}), 400
+    
     # print("This is word under search post", word)
     page = request.args.get('page', 1, type=int)  # Get page number from query params
 
@@ -1711,6 +1738,18 @@ def api_adminsearch_subscription():
     spa = db.session.get(Superadmin, spadmin)
 
     word=request.json.get('search')
+    # Missing query
+    if word is None:
+        return jsonify({"error": "Query field is required"}), 400
+    
+    # Not a string
+    if not isinstance(word, str):
+        return jsonify({"error": "Query must be a string"}), 400
+    
+    # Empty string
+    if word.strip() == "":
+        return jsonify({"error": "Query cannot be empty"}), 400
+    
     # print("This is word under search post", word)
     page = request.args.get('page', 1, type=int)  # Get page number from query params
 
@@ -1799,6 +1838,18 @@ def api_adminsearch_bookappointment():
     spa = db.session.get(Superadmin, spadmin)
 
     word=request.json.get('search')
+    # Missing query
+    if word is None:
+        return jsonify({"error": "Query field is required"}), 400
+    
+    # Not a string
+    if not isinstance(word, str):
+        return jsonify({"error": "Query must be a string"}), 400
+    
+    # Empty string
+    if word.strip() == "":
+        return jsonify({"error": "Query cannot be empty"}), 400
+    
     # print("This is word under search post", word)
     page = request.args.get('page', 1, type=int)  # Get page number from query params
 
@@ -2387,10 +2438,11 @@ def send_fund_api():
         spadmin = userid
     linkurl = request.url
     last_admin_active(userid, user_type)
-    if not request.json or not request.json.get('refno'):
+    if not request.get_json(silent=True) or not request.json.get('refno'):
         return jsonify({"status": False, "message": "Missing reference number"}), 400
 
     refno = request.json.get('refno')
+    
     tf = Transfer.query.filter_by(tf_reference=refno).first()
 
     if not tf:
@@ -2470,7 +2522,9 @@ def finalizetransfer_api():
         })
 
     if request.method == 'POST':
-        data = request.json
+        data = request.get_json(silent=True)
+        if not data:
+            return jsonify({"error": "Invalid JSON data"}), 400
         code = data.get('otp')
         transfercode = session.get('transfer_code')
 
@@ -2519,9 +2573,11 @@ def verify_transfer_api():
     adm = db.session.get(Admin, admin) if admin else None
     spa = db.session.get(Superadmin, spadmin) if spadmin else None
 
-    data = request.get_json()
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({"error": "Invalid JSON data"}), 400
+    
     code = data.get('otp')
-
     if not code:
         return jsonify({'error': 'OTP is required'}), 400
 
