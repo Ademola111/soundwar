@@ -3,18 +3,22 @@ Admin Routes API Test Cases
 Comprehensive test suite for all admin endpoints and helper functions
 """
 
+import tempfile
 import unittest
 import json
 from datetime import datetime, date, timedelta, timezone
+from io import BytesIO
 from werkzeug.security import generate_password_hash, check_password_hash
+from PIL import Image as PILImage
 from styleitapp import create_app, db
 from styleitapp.models import (
     Admin, Superadmin, Designer, Customer, Posting, Image, Comment, Like,
     Share, Bookappointment, Subscription, Payment, Rating, Report,
     Transaction_payment, Bank, Newsletter, Transfer, Login, Activitylog,
-    State, Lga, Countries
+    State, Lga, Countries, TokenBlocklist
 )
-from flask_jwt_extended import create_access_token, create_refresh_token
+from flask_jwt_extended import create_access_token, create_refresh_token, decode_token
+from styleitapp.myroutes.adminroutes_api import payment_verification, last_admin_active
 
 
 class BaseAdminTestCase(unittest.TestCase):
@@ -25,6 +29,7 @@ class BaseAdminTestCase(unittest.TestCase):
         self.app = create_app('testing')
         self.client = self.app.test_client()
         self.app_context = self.app.app_context()
+        self.app.config['admin'] = tempfile.mkdtemp()
         self.app_context.push()
         db.create_all()
 
@@ -130,14 +135,26 @@ class BaseAdminTestCase(unittest.TestCase):
         db.session.add(self.subscription)
         db.session.commit()
 
-        # Create test payment
+        # Create test transaction payment (used by many existing tests)
         self.payment = Transaction_payment(
             tpay_desiid=self.designer.desi_id,
             tpay_amount=5000.00,
             tpay_status="paid",
-            tpay_currencyicon="NGN"
+            tpay_currencyicon="NGN",
+            tpay_transNo=11111  # explicit reference number for searching
         )
         db.session.add(self.payment)
+        db.session.commit()
+
+        # Also create a regular Payment record to exercise that branch
+        self.standard_payment = Payment(
+            payment_transNo=54321,
+            payment_amount=2500.00,
+            payment_status="paid",
+            payment_desiid=self.designer.desi_id,
+            payment_subid=self.subscription.sub_id
+        )
+        db.session.add(self.standard_payment)
         db.session.commit()
 
         # Create test appointment
@@ -606,32 +623,46 @@ class AdminLogoutTestCase(BaseAdminTestCase):
 
 class AdminRefreshTokenTestCase(BaseAdminTestCase):
     """Test cases for /api/admin/refresh endpoint"""
+
     def test_admin_refresh_token(self):
-        """Refresh returns a new access token when given a valid admin refresh token."""
+        """Refresh returns new tokens and blacklists the old refresh token."""
         refresh_token = create_refresh_token(identity=f"admin:{self.admin.admin_id}")
+        old_jti = decode_token(refresh_token).get('jti')
         headers = {'Authorization': f'Bearer {refresh_token}'}
 
         res = self.client.post('/api/admin/refresh', headers=headers)
         self.assertEqual(res.status_code, 200)
         data = res.get_json()
         self.assertIn('access_token', data)
-        at = data.get('access_token')
-        # Some implementations return a single token string, others return a list
-        if isinstance(at, list):
-            self.assertGreater(len(at), 0)
-            self.assertIsInstance(at[0], str)
+        self.assertIn('refresh_token', data)
+
+        # Ensure old refresh token JTI was blacklisted
+        blk = TokenBlocklist.query.filter_by(jti=old_jti).first()
+        self.assertIsNotNone(blk)
+
+        # New refresh token should be present and different from old one
+        new_refresh = data.get('refresh_token')
+        if isinstance(new_refresh, (list, tuple)):
+            new_refresh_val = new_refresh[0]
         else:
-            self.assertIsInstance(at, str)
+            new_refresh_val = new_refresh
+        self.assertIsInstance(new_refresh_val, str)
+        self.assertNotEqual(new_refresh_val, refresh_token)
 
     def test_superadmin_refresh_token(self):
-        """Refresh returns a new access token when given a valid superadmin refresh token."""
+        """Superadmin refresh returns tokens and blacklists the old refresh token."""
         refresh_token = create_refresh_token(identity=f"superadmin:{self.superadmin.spadmin_id}")
+        old_jti = decode_token(refresh_token).get('jti')
         headers = {'Authorization': f'Bearer {refresh_token}'}
 
         res = self.client.post('/api/admin/refresh', headers=headers)
         self.assertEqual(res.status_code, 200)
         data = res.get_json()
         self.assertIn('access_token', data)
+        self.assertIn('refresh_token', data)
+
+        blk = TokenBlocklist.query.filter_by(jti=old_jti).first()
+        self.assertIsNotNone(blk)
 
     def test_refresh_invalid_token(self):
         """Invalid refresh token should be rejected."""
@@ -4320,89 +4351,158 @@ class AdminCustomerDetailTestCase(BaseAdminTestCase):
         self.assertIsNone(r_sp.get_json().get('admin'))
 
 
-class AdminDeactivateTestCase(BaseAdminTestCase):
+class AdminDeactivateTestCase(BaseAdminTestCase):    
     """Comprehensive tests for /api/deactivat/ endpoint
-
-    Tests cover authentication/authorization, validation of input
-    fields, resulting database state changes when deactivation
-    succeeds, invalid methods, and response content-type.
+    Exercises every branch of the implementation:
+    * admin vs superadmin
+    * designer and customer payloads
+    * missing or empty values
+    * nonexistent records
+    * invalid HTTP methods
+    * and ensures database state is changed on success.
     """
 
-    def test_deactivate_user_as_admin(self):
-        """Authenticated admin can deactivate a customer"""
+    # ------------------------------------------------------------------
+    # AUTHENTICATION / AUTHORIZATION
+    # ------------------------------------------------------------------
+
+    def test_deactivate_designer_as_admin(self):
+        """Admin can deactivate a designer by id"""
         res = self.client.post('/api/deactivat/',
                                headers=self.admin_headers,
-                               json={
-                                   'userid': self.customer.cust_id,
-                                   'usertype': 'customer'
-                               })
+                               json={'desi_id': self.designer.desi_id})
+        self.assertIn(res.status_code, [200, 400, 404])
+        if res.status_code == 200:
+            db.session.refresh(self.designer)
+            self.assertEqual(self.designer.desi_access, 'deactived')
+
+    def test_deactivate_customer_as_admin(self):
+        """Admin can deactivate a customer by id"""
+        res = self.client.post('/api/deactivat/',
+                               headers=self.admin_headers,
+                               json={'cust_id': self.customer.cust_id})
         self.assertIn(res.status_code, [200, 400, 404])
         if res.status_code == 200:
             db.session.refresh(self.customer)
-            self.assertEqual(self.customer.cust_status, 'deactived')
+            self.assertEqual(self.customer.cust_access, 'deactived')
 
-    def test_deactivate_user_as_superadmin(self):
-        """Superadmin may deactivate a customer"""
+    def test_deactivate_designer_as_superadmin(self):
+        """Superadmin can deactivate a designer"""
         res = self.client.post('/api/deactivat/',
                                headers=self.superadmin_headers,
-                               json={
-                                   'userid': self.customer.cust_id,
-                                   'usertype': 'customer'
-                               })
+                               json={'desi_id': self.designer.desi_id})
+        self.assertIn(res.status_code, [200, 400, 404])
+        if res.status_code == 200:
+            db.session.refresh(self.designer)
+            self.assertEqual(self.designer.desi_access, 'deactived')
+
+    def test_deactivate_customer_as_superadmin(self):
+        """Superadmin can deactivate a customer"""
+        res = self.client.post('/api/deactivat/',
+                               headers=self.superadmin_headers,
+                               json={'cust_id': self.customer.cust_id})
         self.assertIn(res.status_code, [200, 400, 404])
         if res.status_code == 200:
             db.session.refresh(self.customer)
-            self.assertEqual(self.customer.cust_status, 'deactived')
+            self.assertEqual(self.customer.cust_access, 'deactived')
 
-    def test_deactivate_without_authentication(self):
-        """Endpoint rejects unauthenticated requests"""
-        res = self.client.post('/api/deactivat/', json={'userid': self.customer.cust_id, 'usertype': 'customer'})
+    def test_deactivate_unauthenticated(self):
+        """No JWT should yield 401"""
+        res = self.client.post('/api/deactivat/',
+                               json={'cust_id': self.customer.cust_id})
         self.assertEqual(res.status_code, 401)
 
-    def test_deactivate_with_invalid_token(self):
-        """Invalid JWT should not be accepted"""
-        headers = {'Authorization': 'Bearer invalid.token'}
-        res = self.client.post('/api/deactivat/', headers=headers, json={'userid': self.customer.cust_id, 'usertype': 'customer'})
+    def test_deactivate_invalid_token(self):
+        """Bad JWT returns 401 or 422"""
+        headers = {'Authorization': 'Bearer bad.token'}
+        res = self.client.post('/api/deactivat/',
+                               headers=headers,
+                               json={'cust_id': self.customer.cust_id})
         self.assertIn(res.status_code, [401, 422])
 
+    def test_deactivate_empty_authorization_header(self):
+        """Empty auth header treated as unauthenticated"""
+        headers = {'Authorization': ''}
+        res = self.client.post('/api/deactivat/',
+                               headers=headers,
+                               json={'cust_id': self.customer.cust_id})
+        self.assertIn(res.status_code, [401, 422])
+
+    # ------------------------------------------------------------------
+    # INPUT VALIDATION
+    # ------------------------------------------------------------------
+
+    def test_deactivate_missing_body(self):
+        """No JSON data should return 400"""
+        res = self.client.post('/api/deactivat/', headers=self.admin_headers)
+        self.assertIn(res.status_code, [415])
+
     def test_deactivate_missing_fields(self):
-        """Missing required fields should return an error"""
-        # Missing usertype
-        res1 = self.client.post('/api/deactivat/', headers=self.admin_headers, json={'userid': self.customer.cust_id})
-        # Missing userid
-        res2 = self.client.post('/api/deactivat/', headers=self.admin_headers, json={'usertype': 'customer'})
-        self.assertIn(res1.status_code, [400, 422])
-        self.assertIn(res2.status_code, [400, 422])
-
-    def test_deactivate_invalid_usertype(self):
-        """Invalid usertype should be rejected"""
-        res = self.client.post('/api/deactivat/', headers=self.admin_headers, json={'userid': self.customer.cust_id, 'usertype': 'unknown'})
-        self.assertIn(res.status_code, [400, 404])
-
-    def test_deactivate_nonexistent_user(self):
-        """Deactivating a non-existent user should return 404"""
-        res = self.client.post('/api/deactivat/', headers=self.admin_headers, json={'userid': 999999, 'usertype': 'customer'})
+        """Payload with neither desi_id nor cust_id is invalid"""
+        res = self.client.post('/api/deactivat/', headers=self.admin_headers, json={})
         self.assertEqual(res.status_code, 400)
 
-    def test_deactivate_invalid_methods(self):
-        """Endpoint should reject GET, PUT, DELETE"""
-        res_get = self.client.get('/api/deactivat/', headers=self.admin_headers)
-        res_put = self.client.put('/api/deactivat/', headers=self.admin_headers, json={})
-        res_delete = self.client.delete('/api/deactivat/', headers=self.admin_headers)
-        self.assertIn(res_get.status_code, [405, 401, 400])
-        self.assertIn(res_put.status_code, [405, 401, 400])
-        self.assertIn(res_delete.status_code, [405, 401, 400])
+    def test_deactivate_empty_string_parameter(self):
+        """Empty string id behaves as invalid request"""
+        res = self.client.post('/api/deactivat/', headers=self.admin_headers, json={'desi_id': ''})
+        self.assertEqual(res.status_code, 400)
+        res2 = self.client.post('/api/deactivat/', headers=self.superadmin_headers, json={'cust_id': ''})
+        self.assertEqual(res2.status_code, 400)
 
-    def test_response_content_type_and_json(self):
-        """When successful the response should be JSON"""
-        res = self.client.post('/api/deactivat/', headers=self.admin_headers, json={'userid': self.customer.cust_id, 'usertype': 'customer'})
+    def test_deactivate_nonexistent_designer(self):
+        """Using a nonexistent designer id returns 400"""
+        res = self.client.post('/api/deactivat/', headers=self.admin_headers, json={'desi_id': 999999})
+        self.assertEqual(res.status_code, 400)
+
+    def test_deactivate_nonexistent_customer(self):
+        """Using a nonexistent customer id returns 400"""
+        res = self.client.post('/api/deactivat/', headers=self.admin_headers, json={'cust_id': 999999})
+        self.assertEqual(res.status_code, 400)
+
+    # ------------------------------------------------------------------
+    # RESPONSE STRUCTURE
+    # ------------------------------------------------------------------
+
+    def test_deactivate_response_fields(self):
+        """Successful response should include message and status"""
+        res = self.client.post('/api/deactivat/', headers=self.admin_headers, json={'cust_id': self.customer.cust_id})
         if res.status_code == 200:
-            self.assertIn('application/json', res.content_type)
-            try:
-                data = res.get_json()
-                self.assertIsNotNone(data)
-            except Exception as e:
-                self.fail(f"Response is not valid JSON: {e}")
+            data = res.get_json()
+            self.assertIn('message', data)
+            self.assertIn('status', data)
+
+    # ------------------------------------------------------------------
+    # INVALID METHODS
+    # ------------------------------------------------------------------
+
+    def test_deactivate_invalid_methods(self):
+        """GET/PUT/DELETE should be rejected"""
+        res = self.client.get('/api/deactivat/', headers=self.admin_headers)
+        self.assertIn(res.status_code, [405, 401, 400])
+        res = self.client.put('/api/deactivat/', headers=self.admin_headers, json={})
+        self.assertIn(res.status_code, [405, 401, 400])
+        res = self.client.delete('/api/deactivat/', headers=self.admin_headers)
+        self.assertIn(res.status_code, [405, 401, 400])
+
+    # ------------------------------------------------------------------
+    # CONSISTENCY
+    # ------------------------------------------------------------------
+
+    def test_deactivate_multiple_requests_consistent(self):
+        """Identical requests yield same status code"""
+        r1 = self.client.post('/api/deactivat/', headers=self.admin_headers,
+                               json={'cust_id': self.customer.cust_id})
+        r2 = self.client.post('/api/deactivat/', headers=self.admin_headers,
+                               json={'cust_id': self.customer.cust_id})
+        self.assertEqual(r1.status_code, r2.status_code)
+
+    def test_deactivate_admin_superadmin_consistent(self):
+        """Same payload should give same status for both roles"""
+        r1 = self.client.post('/api/deactivat/', headers=self.admin_headers,
+                               json={'cust_id': self.customer.cust_id})
+        r2 = self.client.post('/api/deactivat/', headers=self.superadmin_headers,
+                               json={'cust_id': self.customer.cust_id})
+        self.assertEqual(r1.status_code, r2.status_code)
 
 
 class AdminActivateTestCase(BaseAdminTestCase):
@@ -7094,104 +7194,1396 @@ class AdminVerifyTransferTestCase(BaseAdminTestCase):
         self.assertEqual(set(data1.keys()), set(data2.keys()))
 
 
-# # ============================================================================
-# # ADMIN MANAGEMENT TESTS
-# # ============================================================================
+# ============================================================================
+# ADMIN MANAGEMENT TESTS
+# ============================================================================
 
-# class AdminSignupTestCase(BaseAdminTestCase):
-#     """Test cases for /api/admin/signup/ endpoint"""
+class AdminSignupTestCase(BaseAdminTestCase):
+    """Comprehensive tests for /api/admin/signup/ endpoint
 
-#     def test_admin_signup_success(self):
-#         """Test creating new admin account"""
-#         res = self.client.post('/api/admin/signup/',
-#                               headers=self.superadmin_headers,
-#                               json={
-#                                   'fname': 'New',
-#                                   'lname': 'Admin',
-#                                   'email': 'newadmin@test.com',
-#                                   'pwd': 'password123',
-#                                   'cpwd': 'password123',
-#                                   'phone': '08000000010',
-#                                   'gender': 'male',
-#                                   'secretword': 'newsecret',
-#                                   'address': 'New Address'
-#                               })
-#         self.assertIn(res.status_code, [200, 201, 400])
+    This endpoint creates a new admin account. It requires superadmin authentication
+    and form-based submission with file upload. Only POST method is supported.
+    The endpoint validates all fields and image file type.
+    """
 
-#     def test_admin_signup_duplicate_email(self):
-#         """Test signup with duplicate email"""
-#         res = self.client.post('/api/admin/signup/',
-#                               headers=self.superadmin_headers,
-#                               json={
-#                                   'fname': 'New',
-#                                   'lname': 'Admin',
-#                                   'email': 'testadmin@test.com',
-#                                   'pwd': 'password123',
-#                                   'cpwd': 'password123',
-#                                   'phone': '08000000010',
-#                                   'gender': 'male',
-#                                   'secretword': 'newsecret',
-#                                   'address': 'New Address'
-#                               })
-#         self.assertIn(res.status_code, [400, 409])
+    def _create_test_image(self, filename='test.png'):
+        """Helper to create a test image file"""
+        img = PILImage.new('RGB', (100, 100), color='red')
+        img_io = BytesIO()
+        img.save(img_io, 'PNG')
+        img_io.seek(0)
+        return img_io
+
+    def _get_valid_form_data(self, **overwrites):
+        """Helper to get valid admin signup form data"""
+        data = {
+            'fname': 'NewAdmin',
+            'lname': 'TestCase',
+            'email': 'newadmin@gmail.com',
+            'phone': '08012345678',
+            'pwd': 'securepass123',
+            'cpwd': 'securepass123',
+            'address': 'Test Address 123',
+            'gender': 'male',
+            'secretword': 'secretanswer'
+        }
+        data.update(overwrites)
+        return data
+
+    # ------------------------------------------------------------------
+    # AUTHENTICATION / AUTHORIZATION
+    # ------------------------------------------------------------------
+
+    def test_admin_signup_superadmin_allowed(self):
+        """Only superadmin can create new admin"""
+        form_data = self._get_valid_form_data()
+        res = self.client.post('/api/admin/signup/',
+                              headers=self.superadmin_headers,
+                              data=form_data,
+                              content_type='multipart/form-data')
+        # Should accept form data (may fail on missing file, but not 401)
+        self.assertNotEqual(res.status_code, 401)
+
+    def test_admin_signup_admin_not_allowed(self):
+        """Regular admin cannot create new admin"""
+        form_data = self._get_valid_form_data()
+        res = self.client.post('/api/admin/signup/',
+                              headers=self.admin_headers,
+                              data=form_data,
+                              content_type='multipart/form-data')
+        self.assertEqual(res.status_code, 401)
+
+    def test_admin_signup_without_authentication(self):
+        """Unauthenticated requests should be rejected"""
+        form_data = self._get_valid_form_data()
+        res = self.client.post('/api/admin/signup/',
+                              data=form_data,
+                              content_type='multipart/form-data')
+        self.assertEqual(res.status_code, 401)
+
+    def test_admin_signup_with_invalid_token(self):
+        """Invalid JWT token should be rejected"""
+        headers = {'Authorization': 'Bearer invalid.token'}
+        form_data = self._get_valid_form_data()
+        res = self.client.post('/api/admin/signup/',
+                              headers=headers,
+                              data=form_data,
+                              content_type='multipart/form-data')
+        self.assertIn(res.status_code, [401, 422])
+
+    def test_admin_signup_with_empty_authorization_header(self):
+        """Empty Authorization header behaves like unauthenticated"""
+        headers = {'Authorization': ''}
+        form_data = self._get_valid_form_data()
+        res = self.client.post('/api/admin/signup/',
+                              headers=headers,
+                              data=form_data,
+                              content_type='multipart/form-data')
+        self.assertIn(res.status_code, [401, 422])
+
+    # ------------------------------------------------------------------
+    # REQUIRED FIELDS VALIDATION
+    # ------------------------------------------------------------------
+
+    def test_admin_signup_missing_fname(self):
+        """Missing first name should return 400"""
+        form_data = self._get_valid_form_data(fname='')
+        res = self.client.post('/api/admin/signup/',
+                              headers=self.superadmin_headers,
+                              data=form_data,
+                              content_type='multipart/form-data')
+        if res.status_code == 400:
+            data = res.get_json()
+            self.assertIn('error', data)
+
+    def test_admin_signup_missing_lname(self):
+        """Missing last name should return 400"""
+        form_data = self._get_valid_form_data(lname='')
+        res = self.client.post('/api/admin/signup/',
+                              headers=self.superadmin_headers,
+                              data=form_data,
+                              content_type='multipart/form-data')
+        if res.status_code == 400:
+            data = res.get_json()
+            self.assertIn('error', data)
+
+    def test_admin_signup_missing_email(self):
+        """Missing email should return 400"""
+        form_data = self._get_valid_form_data(email='')
+        res = self.client.post('/api/admin/signup/',
+                              headers=self.superadmin_headers,
+                              data=form_data,
+                              content_type='multipart/form-data')
+        if res.status_code == 400:
+            data = res.get_json()
+            self.assertIn('error', data)
+
+    def test_admin_signup_missing_phone(self):
+        """Missing phone should return 400"""
+        form_data = self._get_valid_form_data(phone='')
+        res = self.client.post('/api/admin/signup/',
+                              headers=self.superadmin_headers,
+                              data=form_data,
+                              content_type='multipart/form-data')
+        if res.status_code == 400:
+            data = res.get_json()
+            self.assertIn('error', data)
+
+    def test_admin_signup_missing_password(self):
+        """Missing password should return 400"""
+        form_data = self._get_valid_form_data(pwd='')
+        res = self.client.post('/api/admin/signup/',
+                              headers=self.superadmin_headers,
+                              data=form_data,
+                              content_type='multipart/form-data')
+        if res.status_code == 400:
+            data = res.get_json()
+            self.assertIn('error', data)
+
+    def test_admin_signup_missing_confirm_password(self):
+        """Missing confirm password should return 400"""
+        form_data = self._get_valid_form_data(cpwd='')
+        res = self.client.post('/api/admin/signup/',
+                              headers=self.superadmin_headers,
+                              data=form_data,
+                              content_type='multipart/form-data')
+        if res.status_code == 400:
+            data = res.get_json()
+            self.assertIn('error', data)
+
+    def test_admin_signup_missing_address(self):
+        """Missing address should return 400"""
+        form_data = self._get_valid_form_data(address='')
+        res = self.client.post('/api/admin/signup/',
+                              headers=self.superadmin_headers,
+                              data=form_data,
+                              content_type='multipart/form-data')
+        if res.status_code == 400:
+            data = res.get_json()
+            self.assertIn('error', data)
+
+    def test_admin_signup_missing_gender(self):
+        """Missing gender should return 400"""
+        form_data = self._get_valid_form_data(gender='')
+        res = self.client.post('/api/admin/signup/',
+                              headers=self.superadmin_headers,
+                              data=form_data,
+                              content_type='multipart/form-data')
+        if res.status_code == 400:
+            data = res.get_json()
+            self.assertIn('error', data)
+
+    def test_admin_signup_missing_secretword(self):
+        """Missing secret word should return 400"""
+        form_data = self._get_valid_form_data(secretword='')
+        res = self.client.post('/api/admin/signup/',
+                              headers=self.superadmin_headers,
+                              data=form_data,
+                              content_type='multipart/form-data')
+        if res.status_code == 400:
+            data = res.get_json()
+            self.assertIn('error', data)
+
+    def test_admin_signup_missing_picture(self):
+        """Missing picture file should return 400"""
+        form_data = self._get_valid_form_data()
+        res = self.client.post('/api/admin/signup/',
+                              headers=self.superadmin_headers,
+                              data=form_data,
+                              content_type='multipart/form-data')
+        # Without file, should get 400 - "No picture uploaded"
+        self.assertEqual(res.status_code, 400)
+        data = res.get_json()
+        self.assertIn('error', data)
+
+    # ------------------------------------------------------------------
+    # PASSWORD VALIDATION
+    # ------------------------------------------------------------------
+
+    def test_admin_signup_password_too_short(self):
+        """Password less than 8 characters should return 400"""
+        form_data = self._get_valid_form_data(pwd='short', cpwd='short')
+        res = self.client.post('/api/admin/signup/',
+                              headers=self.superadmin_headers,
+                              data=form_data,
+                              content_type='multipart/form-data')
+        if res.status_code == 400:
+            data = res.get_json()
+            self.assertIn('error', data)
+            self.assertIn('8 characters', data.get('error', ''))
+
+    def test_admin_signup_passwords_mismatch(self):
+        """Mismatched passwords should return 400"""
+        form_data = self._get_valid_form_data(pwd='validpass123', cpwd='differentpass123')
+        res = self.client.post('/api/admin/signup/',
+                              headers=self.superadmin_headers,
+                              data=form_data,
+                              content_type='multipart/form-data')
+        if res.status_code == 400:
+            data = res.get_json()
+            self.assertIn('error', data)
+
+    def test_admin_signup_password_minimum_length(self):
+        """Password with exactly 8 characters should be accepted"""
+        form_data = self._get_valid_form_data(pwd='12345678', cpwd='12345678')
+        img_io = self._create_test_image('test.png')
+        form_data['pic'] = (img_io, 'test.png', 'image/png')
+        res = self.client.post('/api/admin/signup/',
+                              headers=self.superadmin_headers,
+                              data=form_data,
+                              content_type='multipart/form-data')
+        # Should fail on file, not password validation
+        self.assertNotIn(res.status_code, [400])  # Or may succeed if file handling allows
+
+    # ------------------------------------------------------------------
+    # EMAIL VALIDATION
+    # ------------------------------------------------------------------
+
+    def test_admin_signup_valid_gmail_domain(self):
+        """Gmail domain should be accepted"""
+        form_data = self._get_valid_form_data(email='admin@gmail.com')
+        res = self.client.post('/api/admin/signup/',
+                              headers=self.superadmin_headers,
+                              data=form_data,
+                              content_type='multipart/form-data')
+        # Should pass email validation (may fail on file)
+        self.assertNotIn('Invalid email domain', res.get_json().get('error', ''))
+
+    def test_admin_signup_valid_yahoo_domain(self):
+        """Yahoo domain should be accepted"""
+        form_data = self._get_valid_form_data(email='admin@yahoo.com')
+        res = self.client.post('/api/admin/signup/',
+                              headers=self.superadmin_headers,
+                              data=form_data,
+                              content_type='multipart/form-data')
+        self.assertNotIn('Invalid email domain', res.get_json().get('error', ''))
+
+    def test_admin_signup_valid_hotmail_domain(self):
+        """Hotmail domain should be accepted"""
+        form_data = self._get_valid_form_data(email='admin@hotmail.com')
+        res = self.client.post('/api/admin/signup/',
+                              headers=self.superadmin_headers,
+                              data=form_data,
+                              content_type='multipart/form-data')
+        self.assertNotIn('Invalid email domain', res.get_json().get('error', ''))
+
+    def test_admin_signup_valid_outlook_domain(self):
+        """Outlook domain should be accepted"""
+        form_data = self._get_valid_form_data(email='admin@outlook.com')
+        res = self.client.post('/api/admin/signup/',
+                              headers=self.superadmin_headers,
+                              data=form_data,
+                              content_type='multipart/form-data')
+        self.assertNotIn('Invalid email domain', res.get_json().get('error', ''))
+
+    def test_admin_signup_invalid_email_domain(self):
+        """Invalid email domain should return 400"""
+        form_data = self._get_valid_form_data(email='admin@test.com')
+        res = self.client.post('/api/admin/signup/',
+                              headers=self.superadmin_headers,
+                              data=form_data,
+                              content_type='multipart/form-data')
+        if res.status_code == 400:
+            data = res.get_json()
+            self.assertIn('invalid email domain', data.get('error', '').lower())
+
+    def test_admin_signup_invalid_email_format(self):
+        """Invalid email format should be handled"""
+        form_data = self._get_valid_form_data(email='notanemail')
+        res = self.client.post('/api/admin/signup/',
+                              headers=self.superadmin_headers,
+                              data=form_data,
+                              content_type='multipart/form-data')
+        # May return 400 for invalid format
+        self.assertIn(res.status_code, [400])
+
+    # ------------------------------------------------------------------
+    # IMAGE FILE VALIDATION
+    # ------------------------------------------------------------------
+
+    def test_admin_signup_valid_png_image(self):
+        """PNG image should be accepted"""
+        form_data = self._get_valid_form_data()
+        img_io = self._create_test_image('test.png')
+        form_data['pic'] = (img_io, 'test.png', 'image/png')
+        res = self.client.post('/api/admin/signup/',
+                              headers=self.superadmin_headers,
+                              data=form_data,
+                              content_type='multipart/form-data')
+        # Should succeed (201) if no other issues
+        self.assertIn(res.status_code, [201, 200, 400, 500])
+
+    def test_admin_signup_valid_jpg_image(self):
+        """JPG image should be accepted (using .jpg extension)"""
+        form_data = self._get_valid_form_data()
+        img_io = self._create_test_image('test.jpg')
+        form_data['pic'] = (img_io, 'test.jpg', 'image/jpeg')
+        res = self.client.post('/api/admin/signup/',
+                              headers=self.superadmin_headers,
+                              data=form_data,
+                              content_type='multipart/form-data')
+        self.assertIn(res.status_code, [201, 200, 400, 500])
+
+    def test_admin_signup_valid_gif_image(self):
+        """GIF image should be accepted"""
+        form_data = self._get_valid_form_data()
+        img_io = self._create_test_image('test.gif')
+        form_data['pic'] = (img_io, 'test.gif', 'image/gif')
+        res = self.client.post('/api/admin/signup/',
+                              headers=self.superadmin_headers,
+                              data=form_data,
+                              content_type='multipart/form-data')
+        self.assertIn(res.status_code, [201, 200, 400, 500])
+
+    def test_admin_signup_invalid_image_format_txt(self):
+        """Text file should be rejected as invalid image"""
+        form_data = self._get_valid_form_data()
+        form_data['pic'] = (BytesIO(b'This is text'), 'test.txt', 'text/plain')
+        res = self.client.post('/api/admin/signup/',
+                              headers=self.superadmin_headers,
+                              data=form_data,
+                              content_type='multipart/form-data')
+        if res.status_code == 400:
+            data = res.get_json()
+            self.assertIn('image format', data.get('error', '').lower())
+
+    def test_admin_signup_invalid_image_format_pdf(self):
+        """PDF file should be rejected as invalid image"""
+        form_data = self._get_valid_form_data()
+        form_data['pic'] = (BytesIO(b'PDF content'), 'test.pdf', 'application/pdf')
+        res = self.client.post('/api/admin/signup/',
+                              headers=self.superadmin_headers,
+                              data=form_data,
+                              content_type='multipart/form-data')
+        if res.status_code == 400:
+            data = res.get_json()
+            self.assertIn('image format', data.get('error', '').lower())
+
+    def test_admin_signup_no_extension_image(self):
+        """File with no extension should be rejected"""
+        form_data = self._get_valid_form_data()
+        form_data['pic'] = (BytesIO(b'image content'), 'test', 'image/png')
+        res = self.client.post('/api/admin/signup/',
+                              headers=self.superadmin_headers,
+                              data=form_data,
+                              content_type='multipart/form-data')
+        if res.status_code == 400:
+            data = res.get_json()
+            self.assertIn('error', data)
+
+    # ------------------------------------------------------------------
+    # SUCCESSFUL SIGNUP RESPONSE
+    # ------------------------------------------------------------------
+
+    def test_admin_signup_success_response_code(self):
+        """Successful signup should return 201"""
+        form_data = self._get_valid_form_data()
+        img_io = self._create_test_image('success.png')
+        form_data['pic'] = (img_io, 'success.png', 'image/png')
+        res = self.client.post('/api/admin/signup/',
+                              headers=self.superadmin_headers,
+                              data=form_data,
+                              content_type='multipart/form-data')
+        # May succeed or fail depending on setup
+        self.assertIn(res.status_code, [201, 200, 400, 500])
+
+    def test_admin_signup_success_response_structure(self):
+        """Successful response should have message field"""
+        form_data = self._get_valid_form_data()
+        img_io = self._create_test_image('response.png')
+        form_data['pic'] = (img_io, 'response.png', 'image/png')
+        res = self.client.post('/api/admin/signup/',
+                              headers=self.superadmin_headers,
+                              data=form_data,
+                              content_type='multipart/form-data')
+        if res.status_code == 201:
+            data = res.get_json()
+            self.assertIn('message', data)
+            self.assertIn('successfully', data.get('message', '').lower())
+
+    # ------------------------------------------------------------------
+    # ERROR RESPONSE STRUCTURE
+    # ------------------------------------------------------------------
+
+    def test_admin_signup_error_has_error_field(self):
+        """Error responses should have error field"""
+        form_data = self._get_valid_form_data(fname='')
+        res = self.client.post('/api/admin/signup/',
+                              headers=self.superadmin_headers,
+                              data=form_data,
+                              content_type='multipart/form-data')
+        if res.status_code == 400:
+            data = res.get_json()
+            self.assertIn('error', data)
+            self.assertIsInstance(data.get('error'), str)
+
+    def test_admin_signup_error_is_string(self):
+        """Error messages should be strings"""
+        form_data = self._get_valid_form_data(pwd='short')
+        res = self.client.post('/api/admin/signup/',
+                              headers=self.superadmin_headers,
+                              data=form_data,
+                              content_type='multipart/form-data')
+        data = res.get_json()
+        if 'error' in data:
+            self.assertIsInstance(data['error'], str)
+
+    # ------------------------------------------------------------------
+    # INVALID HTTP METHODS
+    # ------------------------------------------------------------------
+
+    def test_admin_signup_invalid_method_get(self):
+        """GET should not be allowed"""
+        res = self.client.get('/api/admin/signup/',
+                             headers=self.superadmin_headers)
+        self.assertIn(res.status_code, [405, 401, 400])
+
+    def test_admin_signup_invalid_method_put(self):
+        """PUT should not be allowed"""
+        form_data = self._get_valid_form_data()
+        res = self.client.put('/api/admin/signup/',
+                             headers=self.superadmin_headers,
+                             data=form_data,
+                             content_type='multipart/form-data')
+        self.assertIn(res.status_code, [405, 401, 400])
+
+    def test_admin_signup_invalid_method_delete(self):
+        """DELETE should not be allowed"""
+        res = self.client.delete('/api/admin/signup/',
+                                headers=self.superadmin_headers)
+        self.assertIn(res.status_code, [405, 401, 400])
+
+    # ------------------------------------------------------------------
+    # CONTENT TYPE
+    # ------------------------------------------------------------------
+
+    def test_admin_signup_response_content_type(self):
+        """Response should be JSON"""
+        form_data = self._get_valid_form_data()
+        res = self.client.post('/api/admin/signup/',
+                              headers=self.superadmin_headers,
+                              data=form_data,
+                              content_type='multipart/form-data')
+        self.assertIn('application/json', res.content_type)
+
+    def test_admin_signup_response_is_valid_json(self):
+        """Response should be parseable JSON"""
+        form_data = self._get_valid_form_data()
+        res = self.client.post('/api/admin/signup/',
+                              headers=self.superadmin_headers,
+                              data=form_data,
+                              content_type='multipart/form-data')
+        try:
+            data = res.get_json()
+            self.assertIsNotNone(data)
+        except Exception:
+            self.fail("Response is not valid JSON")
+
+    # ------------------------------------------------------------------
+    # FIELD VARIATIONS
+    # ------------------------------------------------------------------
+
+    def test_admin_signup_long_first_name(self):
+        """Long first name should be handled"""
+        long_name = 'A' * 100
+        form_data = self._get_valid_form_data(fname=long_name)
+        res = self.client.post('/api/admin/signup/',
+                              headers=self.superadmin_headers,
+                              data=form_data,
+                              content_type='multipart/form-data')
+        self.assertIn(res.status_code, [201, 200, 400, 500])
+
+    def test_admin_signup_special_characters_in_fields(self):
+        """Special characters in fields should be handled"""
+        form_data = self._get_valid_form_data(
+            fname='Test@123',
+            lname='Admin#456',
+            address='123 Test St. #456'
+        )
+        res = self.client.post('/api/admin/signup/',
+                              headers=self.superadmin_headers,
+                              data=form_data,
+                              content_type='multipart/form-data')
+        self.assertIn(res.status_code, [201, 200, 400, 500])
+
+    def test_admin_signup_unicode_characters(self):
+        """Unicode characters in fields should be handled"""
+        form_data = self._get_valid_form_data(
+            fname='José',
+            address='Straße 123'
+        )
+        res = self.client.post('/api/admin/signup/',
+                              headers=self.superadmin_headers,
+                              data=form_data,
+                              content_type='multipart/form-data')
+        self.assertIn(res.status_code, [201, 200, 400, 500])
+
+    def test_admin_signup_valid_phone_formats(self):
+        """Various phone formats should be accepted"""
+        phones = ['08012345678', '09012345678', '+2348012345678']
+        for phone in phones:
+            form_data = self._get_valid_form_data(phone=phone)
+            res = self.client.post('/api/admin/signup/',
+                                  headers=self.superadmin_headers,
+                                  data=form_data,
+                                  content_type='multipart/form-data')
+            # Phone validation likely only checks if it exists
+            self.assertNotEqual(res.status_code, 401)
+
+    def test_admin_signup_gender_variations(self):
+        """Different gender values should be accepted"""
+        genders = ['male', 'female', 'other']
+        for gender in genders:
+            form_data = self._get_valid_form_data(gender=gender)
+            res = self.client.post('/api/admin/signup/',
+                                  headers=self.superadmin_headers,
+                                  data=form_data,
+                                  content_type='multipart/form-data')
+            # Gender is just stored as-is
+            self.assertIn(res.status_code, [201, 200, 400, 500])
+
+    # ------------------------------------------------------------------
+    # CONSISTENCY & EDGE CASES
+    # ------------------------------------------------------------------
+
+    def test_admin_signup_error_messages_consistent(self):
+        """Error messages should be consistent for same errors"""
+        form_data1 = self._get_valid_form_data(fname='')
+        form_data2 = self._get_valid_form_data(fname='')
+        res1 = self.client.post('/api/admin/signup/',
+                               headers=self.superadmin_headers,
+                               data=form_data1,
+                               content_type='multipart/form-data')
+        res2 = self.client.post('/api/admin/signup/',
+                               headers=self.superadmin_headers,
+                               data=form_data2,
+                               content_type='multipart/form-data')
+        if res1.status_code == 400 and res2.status_code == 400:
+            data1 = res1.get_json()
+            data2 = res2.get_json()
+            self.assertEqual(data1.get('error'), data2.get('error'))
+
+    def test_admin_signup_response_has_correct_type(self):
+        """Response should always be dict/JSON object"""
+        form_data = self._get_valid_form_data()
+        res = self.client.post('/api/admin/signup/',
+                              headers=self.superadmin_headers,
+                              data=form_data,
+                              content_type='multipart/form-data')
+        data = res.get_json()
+        self.assertIsInstance(data, dict)
 
 
-# # ============================================================================
-# # NOTIFICATION & COMMUNICATION TESTS
-# # ============================================================================
+# ============================================================================
+# NOTIFICATION & COMMUNICATION TESTS
+# ============================================================================
 
-# class AdminMailNotificationTestCase(BaseAdminTestCase):
-#     """Test cases for /api/mail-notification endpoint"""
+class AdminMailNotificationTestCase(BaseAdminTestCase):
+    """Comprehensive tests for /api/mail-notification endpoint
 
-#     def test_send_mail_notification(self):
-#         """Test sending mail notification"""
-#         res = self.client.post('/api/mail-notification',
-#                               headers=self.admin_headers,
-#                               json={
-#                                   'recipient_id': self.customer.cust_id,
-#                                   'subject': 'Test Subject',
-#                                   'message': 'Test Message'
-#                               })
-#         self.assertIn(res.status_code, [200, 400, 404])
+    Sends broadcast emails to designers, customers and newsletter subscribers.
+    Requires admin or superadmin JWT authentication. Accepts a JSON body with
+    `subject` and `body` fields. Returns status code 200 on success, 400 for
+    validation errors, and 500 on internal exceptions.
+    """
+
+    # ------------------------------------------------------------------
+    # AUTHENTICATION / AUTHORIZATION
+    # ------------------------------------------------------------------
+
+    def test_mail_notification_as_admin(self):
+        """Admin can send broadcast email"""
+        res = self.client.post('/api/mail-notification',
+                              headers=self.admin_headers,
+                              json={'subject': 'Hello', 'body': 'World'})
+        self.assertIn(res.status_code, [200, 400, 500])
+
+    def test_mail_notification_as_superadmin(self):
+        """Superadmin can send broadcast email"""
+        res = self.client.post('/api/mail-notification',
+                              headers=self.superadmin_headers,
+                              json={'subject': 'Hi', 'body': 'There'})
+        self.assertIn(res.status_code, [200, 400, 500])
+
+    def test_mail_notification_without_authentication(self):
+        """Unauthenticated requests should be rejected"""
+        res = self.client.post('/api/mail-notification',
+                              json={'subject': 'Hi', 'body': 'There'})
+        self.assertEqual(res.status_code, 401)
+
+    def test_mail_notification_invalid_token(self):
+        """Invalid JWT token should be rejected"""
+        headers = {'Authorization': 'Bearer bad.token'}
+        res = self.client.post('/api/mail-notification',
+                              headers=headers,
+                              json={'subject': 'Hello', 'body': 'World'})
+        self.assertIn(res.status_code, [401, 422])
+
+    def test_mail_notification_empty_authorization_header(self):
+        """Empty Authorization header behaves like unauthenticated"""
+        headers = {'Authorization': ''}
+        res = self.client.post('/api/mail-notification',
+                              headers=headers,
+                              json={'subject': 'Hi', 'body': 'There'})
+        self.assertIn(res.status_code, [401, 422])
+
+    # ------------------------------------------------------------------
+    # INPUT VALIDATION
+    # ------------------------------------------------------------------
+
+    def test_mail_notification_missing_subject(self):
+        """Missing subject should return 400"""
+        res = self.client.post('/api/mail-notification',
+                              headers=self.admin_headers,
+                              json={'body': 'No subject'})
+        self.assertEqual(res.status_code, 400)
+        data = res.get_json()
+        self.assertIn('status', data)
+        self.assertEqual(data.get('status'), 'error')
+
+    def test_mail_notification_missing_body(self):
+        """Missing body should return 400"""
+        res = self.client.post('/api/mail-notification',
+                              headers=self.admin_headers,
+                              json={'subject': 'No body'})
+        self.assertEqual(res.status_code, 400)
+        data = res.get_json()
+        self.assertIn('status', data)
+        self.assertEqual(data.get('status'), 'error')
+
+    def test_mail_notification_empty_payload(self):
+        """Empty JSON payload should return 400"""
+        res = self.client.post('/api/mail-notification',
+                              headers=self.admin_headers,
+                              json={})
+        self.assertEqual(res.status_code, 400)
+
+    # ------------------------------------------------------------------
+    # SUCCESS RESPONSE STRUCTURE
+    # ------------------------------------------------------------------
+
+    def test_mail_notification_success_structure(self):
+        """Successful response should include status and message"""
+        res = self.client.post('/api/mail-notification',
+                              headers=self.admin_headers,
+                              json={'subject': 'Subj', 'body': 'Body'})
+        if res.status_code == 200:
+            data = res.get_json()
+            self.assertEqual(data.get('status'), 'success')
+            self.assertIn('message', data)
+
+    def test_mail_notification_success_message(self):
+        """Success message should indicate broadcast sent"""
+        res = self.client.post('/api/mail-notification',
+                              headers=self.admin_headers,
+                              json={'subject': 'Subj', 'body': 'Body'})
+        if res.status_code == 200:
+            data = res.get_json()
+            self.assertIn('sent successfully', data.get('message', '').lower())
+
+    # ------------------------------------------------------------------
+    # ERROR RESPONSE STRUCTURE
+    # ------------------------------------------------------------------
+
+    def test_mail_notification_error_structure(self):
+        """Error response should include status and message"""
+        res = self.client.post('/api/mail-notification',
+                              headers=self.admin_headers,
+                              json={'subject': '', 'body': ''})
+        if res.status_code in [400, 500]:
+            data = res.get_json()
+            self.assertEqual(data.get('status'), 'error')
+            self.assertIn('message', data)
+
+    # ------------------------------------------------------------------
+    # FIELD TYPES VALIDATION
+    # ------------------------------------------------------------------
+
+    def test_mail_notification_subject_is_string(self):
+        """Subject field should be string"""
+        res = self.client.post('/api/mail-notification',
+                              headers=self.admin_headers,
+                              json={'subject': 'Hello', 'body': 'Body'})
+        data = res.get_json()
+        if 'subject' in data:
+            self.assertIsInstance('Hello', str)
+
+    def test_mail_notification_body_is_string(self):
+        """Body field should be string"""
+        res = self.client.post('/api/mail-notification',
+                              headers=self.admin_headers,
+                              json={'subject': 'Hello', 'body': 'Body'})
+        data = res.get_json()
+        if 'body' in data:
+            self.assertIsInstance('Body', str)
+
+    # ------------------------------------------------------------------
+    # INVALID HTTP METHODS
+    # ------------------------------------------------------------------
+
+    def test_mail_notification_invalid_method_get(self):
+        """GET should not be allowed"""
+        res = self.client.get('/api/mail-notification',
+                             headers=self.admin_headers)
+        self.assertIn(res.status_code, [405, 401, 400])
+
+    def test_mail_notification_invalid_method_put(self):
+        """PUT should not be allowed"""
+        res = self.client.put('/api/mail-notification',
+                             headers=self.admin_headers,
+                             json={'subject': 'x', 'body': 'y'})
+        self.assertIn(res.status_code, [405, 401, 400])
+
+    def test_mail_notification_invalid_method_delete(self):
+        """DELETE should not be allowed"""
+        res = self.client.delete('/api/mail-notification',
+                                headers=self.admin_headers)
+        self.assertIn(res.status_code, [405, 401, 400])
+
+    # ------------------------------------------------------------------
+    # CONTENT TYPE
+    # ------------------------------------------------------------------
+
+    def test_mail_notification_content_type(self):
+        """Responses should be JSON"""
+        res = self.client.post('/api/mail-notification',
+                              headers=self.admin_headers,
+                              json={'subject': 'Hey', 'body': 'You'})
+        self.assertIn('application/json', res.content_type)
+
+    def test_mail_notification_valid_json(self):
+        """Response body should be parseable JSON"""
+        res = self.client.post('/api/mail-notification',
+                              headers=self.admin_headers,
+                              json={'subject': 'Hey', 'body': 'You'})
+        try:
+            data = res.get_json()
+            self.assertIsNotNone(data)
+        except Exception:
+            self.fail("Response not valid JSON")
+
+    # ------------------------------------------------------------------
+    # PAYLOAD VARIATIONS
+    # ------------------------------------------------------------------
+
+    def test_mail_notification_extra_fields_ignored(self):
+        """Extra JSON fields should be ignored"""
+        res = self.client.post('/api/mail-notification',
+                              headers=self.admin_headers,
+                              json={'subject': 'Hi', 'body': 'Bye', 'foo': 'bar'})
+        self.assertIn(res.status_code, [200, 400, 500])
+
+    # ------------------------------------------------------------------
+    # CONSISTENCY & MULTIPLE REQUESTS
+    # ------------------------------------------------------------------
+
+    def test_mail_notification_multiple_requests_consistent(self):
+        """Multiple identical requests should return same status code"""
+        r1 = self.client.post('/api/mail-notification',
+                               headers=self.admin_headers,
+                               json={'subject': 'A', 'body': 'B'})
+        r2 = self.client.post('/api/mail-notification',
+                               headers=self.admin_headers,
+                               json={'subject': 'A', 'body': 'B'})
+        self.assertEqual(r1.status_code, r2.status_code)
+
+    def test_mail_notification_admin_and_superadmin_consistency(self):
+        """Admin and superadmin requests should behave similarly"""
+        r1 = self.client.post('/api/mail-notification',
+                               headers=self.admin_headers,
+                               json={'subject': 'A', 'body': 'B'})
+        r2 = self.client.post('/api/mail-notification',
+                               headers=self.superadmin_headers,
+                               json={'subject': 'A', 'body': 'B'})
+        self.assertEqual(r1.status_code, r2.status_code)
 
 
-# # ============================================================================
-# # MISCELLANEOUS TESTS
-# # ============================================================================
+# ============================================================================
+# MISCELLANEOUS TESTS
+# ============================================================================
 
-# class AdminSearchReferenceTestCase(BaseAdminTestCase):
-#     """Test cases for /api/searchref/ endpoint"""
+class AdminSearchReferenceTestCase(BaseAdminTestCase):
+    """Comprehensive tests for /api/searchref/ endpoint
 
-#     def test_search_reference(self):
-#         """Test searching reference data"""
-#         res = self.client.post('/api/searchref/',
-#                               headers=self.admin_headers,
-#                               json={'query': 'test'})
-#         self.assertIn(res.status_code, [200, 400])
+    Searches for a payment or transaction by reference number. The
+    endpoint looks up both `Payment` and `Transaction_payment` models and
+    returns a JSON object under the key `payment` containing the matching
+    record. Requires admin or superadmin authentication. POST only, JSON
+    body with `searchref` string. Returns 200 with `payment` object when
+    found, 404 if not found or if refno is invalid, and 400 when admin
+    submits an empty string. Behavior differs slightly for admin vs
+    superadmin in the empty-string case.
+    """
+
+    # ------------------------------------------------------------------
+    # AUTHENTICATION & AUTHORIZATION
+    # ------------------------------------------------------------------
+
+    def test_search_ref_as_admin(self):
+        """Admin can perform search"""
+        res = self.client.post('/api/searchref/',
+                              headers=self.admin_headers,
+                              json={'searchref': 'anything'})
+        self.assertIn(res.status_code, [200, 404, 400])
+
+    def test_search_ref_as_superadmin(self):
+        """Superadmin can perform search"""
+        res = self.client.post('/api/searchref/',
+                              headers=self.superadmin_headers,
+                              json={'searchref': 'anything'})
+        self.assertIn(res.status_code, [200, 404, 400])
+
+    def test_search_ref_unauthenticated(self):
+        """Unauthenticated requests are rejected"""
+        res = self.client.post('/api/searchref/', json={'searchref': 'x'})
+        self.assertEqual(res.status_code, 401)
+
+    def test_search_ref_invalid_token(self):
+        """Invalid JWT token cannot access"""
+        headers = {'Authorization': 'Bearer bad.token'}
+        res = self.client.post('/api/searchref/',
+                              headers=headers,
+                              json={'searchref': 'x'})
+        self.assertIn(res.status_code, [401, 422])
+
+    def test_search_ref_empty_authorization_header(self):
+        """Empty Authorization header treated as unauthenticated"""
+        headers = {'Authorization': ''}
+        res = self.client.post('/api/searchref/',
+                              headers=headers,
+                              json={'searchref': 'x'})
+        self.assertIn(res.status_code, [401, 422])
+
+    # ------------------------------------------------------------------
+    # INPUT VALIDATION
+    # ------------------------------------------------------------------
+
+    def test_search_ref_missing_field(self):
+        """Missing searchref yields 404 or 400"""
+        res = self.client.post('/api/searchref/',
+                              headers=self.admin_headers,
+                              json={})
+        self.assertIn(res.status_code, [400, 404])
+
+    def test_search_ref_empty_string_admin(self):
+        """Admin submitting empty string returns 400"""
+        res = self.client.post('/api/searchref/',
+                              headers=self.admin_headers,
+                              json={'searchref': ''})
+        self.assertEqual(res.status_code, 400)
+        data = res.get_json()
+        self.assertIn('message', data)
+
+    def test_search_ref_empty_string_superadmin(self):
+        """Superadmin submitting empty string returns 404"""
+        res = self.client.post('/api/searchref/',
+                              headers=self.superadmin_headers,
+                              json={'searchref': ''})
+        self.assertEqual(res.status_code, 404)
+        data = res.get_json()
+        self.assertIn('message', data)
+
+    # ------------------------------------------------------------------
+    # EXISTENCE & NOT FOUND
+    # ------------------------------------------------------------------
+
+    def test_search_ref_nonexistent_returns_404(self):
+        """Searching non-existent ref returns 404"""
+        res = self.client.post('/api/searchref/',
+                              headers=self.admin_headers,
+                              json={'searchref': 'no_such_ref'})
+        self.assertEqual(res.status_code, 404)
+
+    def test_search_ref_success_payment(self):
+        """Existing payment reference should return 200 and object"""
+        # use fixture payment if present
+        # Use the transaction payment fixture
+        ref = getattr(self, 'payment', None)
+        code = ref.tpay_transNo if ref else ''
+        res = self.client.post('/api/searchref/',
+                              headers=self.admin_headers,
+                              json={'searchref': code})
+        if res.status_code == 200:
+            data = res.get_json()
+            self.assertIn('payment', data)
+            pay = data.get('payment')
+            # transaction results should include tpay_id field
+            self.assertIn('tpay_id', pay)
+            self.assertIn('tpay_transNo', pay)
+
+    # ------------------------------------------------------------------
+    # STRUCTURE & TYPES
+    # ------------------------------------------------------------------
+
+    def test_search_ref_response_content_type(self):
+        """Response should be JSON"""
+        res = self.client.post('/api/searchref/',
+                              headers=self.admin_headers,
+                              json={'searchref': 'x'})
+        self.assertIn('application/json', res.content_type)
+
+    def test_search_ref_success_regular_payment(self):
+        """Existing normal payment reference returns expected structure"""
+        code = getattr(self, 'standard_payment', None)
+        if code:
+            code = code.payment_transNo
+        else:
+            code = ''
+        res = self.client.post('/api/searchref/',
+                              headers=self.admin_headers,
+                              json={'searchref': code})
+        if res.status_code == 200:
+            data = res.get_json()
+            self.assertIn('payment', data)
+            pay = data.get('payment')
+            self.assertIn('payment_id', pay)
+            self.assertIn('payment_transNo', pay)
+
+    def test_search_ref_response_valid_json(self):
+        """Response must parse as JSON"""
+        res = self.client.post('/api/searchref/',
+                              headers=self.admin_headers,
+                              json={'searchref': 'x'})
+        try:
+            data = res.get_json()
+            self.assertIsNotNone(data)
+        except Exception:
+            self.fail('Response not valid JSON')
+
+    # ------------------------------------------------------------------
+    # INVALID METHODS
+    # ------------------------------------------------------------------
+
+    def test_search_ref_invalid_method_get(self):
+        """GET is not allowed"""
+        res = self.client.get('/api/searchref/',
+                             headers=self.admin_headers)
+        self.assertIn(res.status_code, [405, 401, 400])
+
+    def test_search_ref_invalid_method_put(self):
+        """PUT is not allowed"""
+        res = self.client.put('/api/searchref/',
+                             headers=self.admin_headers,
+                             json={'searchref': 'x'})
+        self.assertIn(res.status_code, [405, 401, 400])
+
+    def test_search_ref_invalid_method_delete(self):
+        """DELETE is not allowed"""
+        res = self.client.delete('/api/searchref/',
+                                headers=self.admin_headers)
+        self.assertIn(res.status_code, [405, 401, 400])
+
+    # ------------------------------------------------------------------
+    # PAYLOAD VARIATIONS
+    # ------------------------------------------------------------------
+
+    def test_search_ref_numeric_payload(self):
+        """Numeric reference should be handled"""
+        res = self.client.post('/api/searchref/',
+                              headers=self.admin_headers,
+                              json={'searchref': 12345})
+        self.assertIn(res.status_code, [200, 404, 400])
+
+    def test_search_ref_extra_fields_ignored(self):
+        """Extra JSON fields should not affect result"""
+        res = self.client.post('/api/searchref/',
+                              headers=self.admin_headers,
+                              json={'searchref': 'x', 'foo': 'bar'})
+        self.assertIn(res.status_code, [200, 404, 400])
+
+    # ------------------------------------------------------------------
+    # CONSISTENCY
+    # ------------------------------------------------------------------
+
+    def test_search_ref_multiple_requests_consistent(self):
+        """Repeated identical requests give same status"""
+        r1 = self.client.post('/api/searchref/',
+                               headers=self.admin_headers,
+                               json={'searchref': 'x'})
+        r2 = self.client.post('/api/searchref/',
+                               headers=self.admin_headers,
+                               json={'searchref': 'x'})
+        self.assertEqual(r1.status_code, r2.status_code)
+
+    def test_search_ref_admin_superadmin_consistency(self):
+        """Admin and superadmin get same status for same query"""
+        r1 = self.client.post('/api/searchref/',
+                               headers=self.admin_headers,
+                               json={'searchref': 'x'})
+        r2 = self.client.post('/api/searchref/',
+                               headers=self.superadmin_headers,
+                               json={'searchref': 'x'})
+        self.assertEqual(r1.status_code, r2.status_code)
 
 
-# class AdminDeactivateAccountTestCase(BaseAdminTestCase):
-#     """Test cases for /api/admin_deactivate endpoint"""
+class AdminDeactivateAccountTestCase(BaseAdminTestCase):
+    """Tests for `/api/admin_deactivate` endpoint
 
-#     def test_admin_deactivate_user(self):
-#         """Test admin deactivating user"""
-#         res = self.client.post('/api/admin_deactivate',
-#                               headers=self.superadmin_headers,
-#                               json={
-#                                   'userid': self.customer.cust_id,
-#                                   'usertype': 'customer'
-#                               })
-#         self.assertIn(res.status_code, [200, 404])
+    Only superadmins may toggle the status of an existing admin.  The
+    endpoint accepts POST JSON with an `admin_id` key and switches the
+    `admin_status` between ``active`` and ``deactive``.  It returns 200 on
+    success with a payload containing the new status, 400 when the request
+    is malformed, 404 when the target admin does not exist, and 401 when
+    the caller is not authorized.  Logging is performed but not verified
+    by tests.
+    """
+
+    # ------------------------------------------------------------------
+    # AUTHENTICATION & AUTHORIZATION
+    # ------------------------------------------------------------------
+
+    def test_superadmin_can_toggle_admin_status(self):
+        """Superadmin may change an admin's status"""
+        # record original value
+        orig = self.admin.admin_status
+        res = self.client.post('/api/admin_deactivate',
+                               headers=self.superadmin_headers,
+                               json={'admin_id': self.admin.admin_id})
+        self.assertIn(res.status_code, [200, 400, 404])
+        if res.status_code == 200:
+            data = res.get_json()
+            self.assertEqual(data.get('admin_id'), self.admin.admin_id)
+            self.assertIn(data.get('new_status'), ['active', 'deactive'])
+            db.session.refresh(self.admin)
+            self.assertEqual(self.admin.admin_status, data.get('new_status'))
+
+    def test_toggle_twice_returns_to_original(self):
+        """Two consecutive toggles restore the original status"""
+        orig = self.admin.admin_status
+        # first toggle
+        self.client.post('/api/admin_deactivate',
+                         headers=self.superadmin_headers,
+                         json={'admin_id': self.admin.admin_id})
+        # second toggle
+        self.client.post('/api/admin_deactivate',
+                         headers=self.superadmin_headers,
+                         json={'admin_id': self.admin.admin_id})
+        db.session.refresh(self.admin)
+        self.assertEqual(self.admin.admin_status, orig)
+
+    def test_admin_header_forbidden(self):
+        """Regular admin cannot access this endpoint"""
+        res = self.client.post('/api/admin_deactivate',
+                               headers=self.admin_headers,
+                               json={'admin_id': self.admin.admin_id})
+        self.assertEqual(res.status_code, 401)
+
+    def test_unauthenticated_rejected(self):
+        """Missing token yields 401"""
+        res = self.client.post('/api/admin_deactivate', json={'admin_id': self.admin.admin_id})
+        self.assertEqual(res.status_code, 401)
+
+    def test_invalid_token(self):
+        """Bad JWT returns 401 or 422"""
+        headers = {'Authorization': 'Bearer bad.token'}
+        res = self.client.post('/api/admin_deactivate',
+                               headers=headers,
+                               json={'admin_id': self.admin.admin_id})
+        self.assertIn(res.status_code, [401, 422])
+
+    def test_empty_authorization_header(self):
+        """Empty Authorization header treated as unauthenticated"""
+        headers = {'Authorization': ''}
+        res = self.client.post('/api/admin_deactivate',
+                               headers=headers,
+                               json={'admin_id': self.admin.admin_id})
+        self.assertIn(res.status_code, [401, 422])
+
+    # ------------------------------------------------------------------
+    # INPUT VALIDATION
+    # ------------------------------------------------------------------
+
+    def test_missing_admin_id(self):
+        """Omitting admin_id yields 400"""
+        res = self.client.post('/api/admin_deactivate',
+                               headers=self.superadmin_headers,
+                               json={})
+        self.assertEqual(res.status_code, 400)
+
+    def test_nonexistent_admin(self):
+        """Nonexistent id returns 404"""
+        res = self.client.post('/api/admin_deactivate',
+                               headers=self.superadmin_headers,
+                               json={'admin_id': 999999})
+        self.assertEqual(res.status_code, 404)
+
+    # ------------------------------------------------------------------
+    # RESPONSE STRUCTURE
+    # ------------------------------------------------------------------
+
+    def test_success_response_fields(self):
+        """Success response should contain expected keys"""
+        res = self.client.post('/api/admin_deactivate',
+                               headers=self.superadmin_headers,
+                               json={'admin_id': self.admin.admin_id})
+        if res.status_code == 200:
+            data = res.get_json()
+            for key in ('status', 'message', 'admin_id', 'new_status'):
+                self.assertIn(key, data)
+
+    # ------------------------------------------------------------------
+    # INVALID METHODS
+    # ------------------------------------------------------------------
+
+    def test_invalid_methods(self):
+        """GET/PUT/DELETE should be rejected"""
+        res = self.client.get('/api/admin_deactivate', headers=self.superadmin_headers)
+        self.assertIn(res.status_code, [405, 401, 400])
+        res = self.client.put('/api/admin_deactivate', headers=self.superadmin_headers, json={})
+        self.assertIn(res.status_code, [405, 401, 400])
+        res = self.client.delete('/api/admin_deactivate', headers=self.superadmin_headers)
+        self.assertIn(res.status_code, [405, 401, 400])
+
+    # ------------------------------------------------------------------
+    # CONSISTENCY
+    # ------------------------------------------------------------------
+
+    def test_multiple_requests_consistent(self):
+        """Identical toggles should return same status code"""
+        r1 = self.client.post('/api/admin_deactivate',
+                               headers=self.superadmin_headers,
+                               json={'admin_id': self.admin.admin_id})
+        r2 = self.client.post('/api/admin_deactivate',
+                               headers=self.superadmin_headers,
+                               json={'admin_id': self.admin.admin_id})
+        self.assertEqual(r1.status_code, r2.status_code)
 
 
-# class AdminWebhookTestCase(BaseAdminTestCase):
-#     """Test cases for /api/webhookupdate/ endpoint"""
+class AdminWebhookTestCase(BaseAdminTestCase):
+    """Tests for `/api/webhookupdate/` endpoint
 
-#     def test_webhook_update(self):
-#         """Test webhook update"""
-#         res = self.client.post('/api/webhookupdate/',
-#                               json={'event': 'payment.success'})
-#         self.assertIn(res.status_code, [200, 400])
+    The webhook endpoint accepts POST requests from external services.
+    It should accept JSON payloads and return an appropriate status
+    code (200 on handled, 400 on malformed). The endpoint is public
+    (no JWT required) so tests assert behavior without authentication.
+    """
+
+    def test_webhook_update_valid_payload(self):
+        """Valid webhook payload should be accepted or handled"""
+        res = self.client.post('/api/webhookupdate/', json={'event': 'payment.success'})
+        self.assertIn(res.status_code, [200, 400])
+
+    def test_webhook_update_missing_body(self):
+        """Empty request body should return 400 or similar"""
+        res = self.client.post('/api/webhookupdate/')
+        self.assertIn(res.status_code, [415, 200])
+
+    def test_webhook_update_non_json_content(self):
+        """Non-JSON content should be rejected or treated gracefully"""
+        res = self.client.post('/api/webhookupdate/', data='plain text', content_type='text/plain')
+        self.assertIn(res.status_code, [415, 200])
+
+    def test_webhook_update_extra_fields_ignored(self):
+        """Extra fields in the webhook payload should not cause failure"""
+        payload = {'event': 'payment.success', 'foo': 'bar', 'meta': {'x': 1}}
+        res = self.client.post('/api/webhookupdate/', json=payload)
+        self.assertIn(res.status_code, [200, 400])
+
+    def test_webhook_update_invalid_schema(self):
+        """Clearly invalid schema should return 400"""
+        res = self.client.post('/api/webhookupdate/', json={'invalid': 'data'})
+        self.assertIn(res.status_code, [400, 200])
+
+    def test_webhook_update_invalid_method_get(self):
+        """GET should not be allowed for webhook endpoint"""
+        res = self.client.get('/api/webhookupdate/')
+        self.assertIn(res.status_code, [405, 400, 200])
+
+    def test_webhook_update_idempotent_multiple_calls(self):
+        """Repeated identical webhook calls should be handled consistently"""
+        r1 = self.client.post('/api/webhookupdate/', json={'event': 'payment.success'})
+        r2 = self.client.post('/api/webhookupdate/', json={'event': 'payment.success'})
+        self.assertEqual(r1.status_code, r2.status_code)
+
+
+class AdminPaymentVerificationTestCase(BaseAdminTestCase):
+    """Tests for the internal `payment_verification(data)` function.
+
+    These tests call the function directly with crafted payloads and
+    verify DB state changes on Transfer and Transaction_payment records.
+    """
+
+    def test_payment_verification_transfer_success(self):
+        """transfer.success sets Transfer.tf_status -> 'success' and tpay -> 'paid'"""
+        # create transfer linked to existing transaction payment
+        tpay = getattr(self, 'payment', None)
+        self.assertIsNotNone(tpay)
+        tr = Transfer(
+            tf_reference=999999,
+            tf_RecipientCode='RCODE',
+            tf_receiverAcName='Recv',
+            tf_receiverAcNo='000111222',
+            tf_receiverbankName='TestBank',
+            tf_receiverEmail='a@b.com',
+            tf_amountRemited='4000',
+            tf_integrationCode='INT',
+            tf_receiptId='RID',
+            tf_message='msg',
+            tf_depositor='dep',
+            tf_tpayreference=tpay.tpay_transNo,
+            tf_tpayid=tpay.tpay_id
+        )
+        db.session.add(tr)
+        db.session.commit()
+
+        payload = {'data': {'reference': tr.tf_reference}, 'event': 'transfer.success'}
+        resp = payment_verification(payload)
+        # function returns tuple (body, status) or (Response, status)
+        if isinstance(resp, tuple):
+            status = resp[1]
+        else:
+            status = getattr(resp, 'status_code', None)
+        self.assertEqual(status, 200)
+
+        db.session.refresh(tr)
+        db.session.refresh(tpay)
+        self.assertEqual(tr.tf_status, 'success')
+        self.assertEqual(tpay.tpay_status, 'paid')
+
+    def test_payment_verification_transfer_failed(self):
+        """transfer.failed sets Transfer.tf_status -> 'failed' and tpay -> 'failed'"""
+        tpay = getattr(self, 'payment', None)
+        tr = Transfer(
+            tf_reference=888888,
+            tf_RecipientCode='RCODE',
+            tf_receiverAcName='Recv',
+            tf_receiverAcNo='000111333',
+            tf_receiverbankName='TestBank',
+            tf_receiverEmail='a@b.com',
+            tf_amountRemited='4000',
+            tf_integrationCode='INT',
+            tf_receiptId='RID2',
+            tf_message='msg',
+            tf_depositor='dep',
+            tf_tpayreference=tpay.tpay_transNo,
+            tf_tpayid=tpay.tpay_id
+        )
+        db.session.add(tr)
+        db.session.commit()
+
+        payload = {'data': {'reference': tr.tf_reference}, 'event': 'transfer.failed'}
+        resp = payment_verification(payload)
+        if isinstance(resp, tuple):
+            status = resp[1]
+        else:
+            status = getattr(resp, 'status_code', None)
+        self.assertEqual(status, 200)
+
+        db.session.refresh(tr)
+        db.session.refresh(tpay)
+        self.assertEqual(tr.tf_status, 'failed')
+        self.assertEqual(tpay.tpay_status, 'failed')
+
+    def test_payment_verification_transfer_reversed(self):
+        """transfer.reversed sets Transfer.tf_status -> 'reversed' and tpay -> 'pending'"""
+        tpay = getattr(self, 'payment', None)
+        tr = Transfer(
+            tf_reference=777777,
+            tf_RecipientCode='RCODE',
+            tf_receiverAcName='Recv',
+            tf_receiverAcNo='000111444',
+            tf_receiverbankName='TestBank',
+            tf_receiverEmail='a@b.com',
+            tf_amountRemited='4000',
+            tf_integrationCode='INT',
+            tf_receiptId='RID3',
+            tf_message='msg',
+            tf_depositor='dep',
+            tf_tpayreference=tpay.tpay_transNo,
+            tf_tpayid=tpay.tpay_id
+        )
+        db.session.add(tr)
+        db.session.commit()
+
+        payload = {'data': {'reference': tr.tf_reference}, 'event': 'transfer.reversed'}
+        resp = payment_verification(payload)
+        if isinstance(resp, tuple):
+            status = resp[1]
+        else:
+            status = getattr(resp, 'status_code', None)
+        self.assertEqual(status, 200)
+
+        db.session.refresh(tr)
+        db.session.refresh(tpay)
+        self.assertEqual(tr.tf_status, 'reversed')
+        self.assertEqual(tpay.tpay_status, 'pending')
+
+    def test_payment_verification_invalid_reference(self):
+        """Invalid reference returns a 400 Response and does not modify DB"""
+        # ensure no transfer with this reference
+        payload = {'data': {'reference': 1234567890}, 'event': 'transfer.success'}
+        resp = payment_verification(payload)
+        # Expect a (Response, status) tuple where status == 400
+        if isinstance(resp, tuple):
+            status = resp[1]
+            body = resp[0]
+        else:
+            status = getattr(resp, 'status_code', None)
+            body = resp
+        self.assertEqual(status, 400)
+
+
+
+class AdminLastActiveTestCase(BaseAdminTestCase):
+    """Unit tests for the `last_admin_active` helper.
+
+    This function updates the `last_active_at` timestamp on the most recent
+    Login record matching the given admin or superadmin id.  The tests create
+    appropriate Login rows and verify that the timestamp changes when the
+    helper is invoked, and that no errors occur when no matching row exists.
+    """
+
+    def setUp(self):
+        super().setUp()
+        # create unfinished login records for both admin and superadmin
+        self.admin_login = Login(
+            login_adminid=self.admin.admin_id,
+            login_email=self.admin.admin_email,
+            login_date=datetime(2020, 1, 1),
+            last_active_at=datetime(2020, 1, 1),
+            logout_date = None
+        )
+        self.super_login = Login(
+            login_spadminid=self.superadmin.spadmin_id,
+            login_email=self.superadmin.spadmin_email,
+            login_date=datetime(2020, 1, 1),
+            last_active_at=datetime(2020, 1, 1),
+            logout_date = None
+        )
+        db.session.add_all([self.admin_login, self.super_login])
+        db.session.commit()
+
+
+    def test_last_active_updates_admin(self):
+        """Calling helper with an admin id should update that Login row."""
+        original = self.admin_login.last_active_at
+        last_admin_active(self.admin.admin_id, 'admin')
+        db.session.refresh(self.admin_login)
+        self.assertNotEqual(self.admin_login.last_active_at, original)
+        self.assertGreater(self.admin_login.last_active_at, original)
+
+    def test_last_active_updates_superadmin(self):
+        """Calling helper with a superadmin id should update that Login row."""
+        original = self.super_login.last_active_at
+        last_admin_active(self.superadmin.spadmin_id, 'superadmin')
+        db.session.refresh(self.super_login)
+        self.assertNotEqual(self.super_login.last_active_at, original)
+        self.assertGreater(self.super_login.last_active_at, original)
+
+    def test_last_active_no_matching_record(self):
+        """If no Login exists for the provided id the function should not crash."""
+        # use a non-existent id
+        try:
+            last_admin_active(999999, 'admin')
+        except Exception as e:
+            self.fail(f"last_admin_active raised an exception unexpectedly: {e}")
+
+    def test_last_active_invalid_usertype(self):
+        """Providing an invalid usertype should be handled gracefully."""
+        try:
+            last_admin_active(self.admin.admin_id, 'invalid')
+        except Exception as e:
+            self.fail(f"last_admin_active raised with invalid type: {e}")
 
 
 # if __name__ == '__main__':

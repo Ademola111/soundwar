@@ -2155,11 +2155,6 @@ def admin_signup_api():
     gender = request.form.get('gender')
     pic = request.files.get('pic')
 
-    if not pic:
-        return jsonify({"error": "No picture uploaded"}), 400
-
-    original_name = pic.filename
-
     # print(fname, lname, secretword, email, phone, pwd, cpwd, address, gender)
     # Check if all required fields are provided
     if not all([fname, lname, secretword, email, phone, pwd, cpwd, address, gender]):
@@ -2172,12 +2167,19 @@ def admin_signup_api():
     # Check if passwords match
     if pwd != cpwd:
         return jsonify({"error": "Passwords do not match"}), 400
-
+    
+    if '@' not in email:
+        return jsonify({"error": "Invalid email format"}), 400
+    
     # Check if the email is valid
     mail = email.split('@')
     if mail[1] not in ['gmail.com', 'yahoo.com', 'hotmail.com', 'outlook.com']:
         return jsonify({"error": "Invalid email domain"}), 400
+    
+    if not pic:
+        return jsonify({"error": "No picture uploaded"}), 400
 
+    original_name = pic.filename
     # Hash the password
     hashed_password = generate_password_hash(pwd)
 
@@ -2977,8 +2979,11 @@ def admin_deactivate_api():
     usertype, spadmin = identity.split(':') if identity else (None, None)
     if not spadmin or not usertype:
         return jsonify({'error': 'Unauthorized'}), 401
+    if usertype != "superadmin":
+        return jsonify({"error": "Unauthorized"}), 401
     last_admin_active(spadmin, usertype)
     spa = db.session.get(Superadmin, spadmin)
+    
     data = request.get_json()
     admin_id = data.get('admin_id')
 
@@ -3234,20 +3239,22 @@ def last_admin_active(id, usertype):
         spadmin = userid
         admin = None
 
-    if admin:
+    if user_type == 'admin':
         login = (
             Login.query
-            .filter(Login.login_adminid == admin, Login.logout_date == None)
+            .filter(Login.login_adminid == admin, Login.logout_date.is_(None))
             .order_by(Login.login_date.desc())
             .first()
         )
         
-    else:
+    elif user_type == 'superadmin':
         login = (
-            Login.query.filter(Login.login_spadminid == spadmin, Login.logout_date == None)
+            Login.query.filter(Login.login_spadminid == spadmin, Login.logout_date.is_(None))
             .order_by(Login.login_date.desc())
             .first()
         )
+    else:
+        return None
     
     if login:
         login.last_active_at = datetime.now()
