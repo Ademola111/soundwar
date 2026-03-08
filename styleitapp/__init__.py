@@ -50,7 +50,7 @@ def create_app(config_name="production", *args, **kwargs):
 
     CORS(
         app,
-        resources={r"/api/*": {"origins": ["http://localhost:5173", "http://127.0.0.1:5173"]}},
+        resources={r"/api/*": {"origins": ["http://localhost:5173", "http://127.0.0.1:5173", "https://styleit2-0.vercel.app"]}},
         supports_credentials=True,
         allow_headers=["Content-Type", "Authorization", "X-Requested-With", "Accept"],
         methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"]

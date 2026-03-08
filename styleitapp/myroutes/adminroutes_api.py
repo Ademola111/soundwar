@@ -6,16 +6,19 @@ from flask import Blueprint, current_app, render_template, request, redirect, se
 from flask_jwt_extended import get_jwt, jwt_required, get_jwt_identity, create_access_token, verify_jwt_in_request, create_refresh_token
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_mail import Message
-from styleitapp import db, csrf
+from styleitapp import db, csrf, limiter
 from styleitapp.junk import styleit, spamming
+from styleitapp.mail_utils import send_admin_password_reset_email, send_superadmin_password_reset_email
 from styleitapp.models import (Designer, Customer, Posting, Image,
                                Comment, Like, Share, Bookappointment, Countries,
                                Subscription, Payment, Admin, TokenBlocklist, Superadmin, Rating,
                                Report, Transaction_payment, Bank, Newsletter,
                                Bankcodes, Transfer, Login, Activitylog, State, Lga)
 from styleitapp import mail
+from styleitapp.mytoken import confirm_password_reset_token
 
 admin_api_bp = Blueprint("admin_api", __name__)
+laps = "3 per second"
 rows_per_page = 12
 rows_page = 3
 
@@ -157,66 +160,93 @@ def admin_login_api():
     return jsonify({"message": "Method not allowed"}), 405
 
 
-"""Admin Forgotten Password"""
+""" forgotten password """
+@limiter.limit(laps)
 @csrf.exempt
-@admin_api_bp.route('/api/admin/forgottenpassword', methods=['POST'])
-def api_admin_forgotten_password():
-    try:
-        identity = verify_jwt_in_request()
-        user_type, userid = identity.split(':') if identity else (None, None)
-        if user_type == 'admin':
-            admin = userid
-            spadmin = None
-            return jsonify({'status':'success', 'redirect_url': '/api/admin/dashboard/', 'adminid': admin,
-                        'message': 'Already logged in'}), 200
-        else:
-            admin = None
-            spadmin = userid
-            return jsonify({'status':'success', 'redirect_url': '/api/admin/dashboard/', 'spadminid': spadmin,
-                        'message': 'Already logged in'}), 200
-    except Exception:
-        pass
-    
-    data = request.json
-    username = data.get('username')
-    email = data.get('email')
-    pwd = data.get('pwd')
-    cpwd = data.get('cpwd')
+@admin_api_bp.route("/api/admin/forgot-password", methods=["POST"])
+def admin_forgot_password():
 
-    # Validate fields
-    if not username or not email or not pwd or not cpwd:
-        return jsonify({'status': 'error', 'message': 'One or more fields are empty'}), 400
-    elif pwd != cpwd:
-        return jsonify({'status': 'error', 'message': 'Password and confirmation do not match'}), 400
+    email = request.json.get("email")
 
-    hashed_pwd = generate_password_hash(pwd)
-    cust = Admin.query.filter_by(admin_email=email).first()
+    adm = Admin.query.filter_by(admin_email=email).first()    
     spa = Superadmin.query.filter_by(spadmin_email=email).first()
-
-    if cust:
-        if cust.admin_status == 'deactive':
-            return jsonify({'status': 'error', 'message': 'Record cannot be found'}), 404
-        elif check_password_hash(cust.admin_pass, pwd):
-            return jsonify({'status': 'error', 'message': 'This password has been used earlier'}), 400
-        elif cust.admin_secretword == username:
-            cust.admin_pass = hashed_pwd
-            db.session.commit()
-            last_admin_active(cust.admin_id, 'admin')
-            return jsonify({'status': 'success', 'message': 'Password updated successfully'}), 200
-
+    
+    if adm:
+        send_admin_password_reset_email(adm)
+        return jsonify({
+        "message": "If the email exists, a reset link has been sent."
+        }), 200
     elif spa:
-        if spa.spadmin_status == 'deactive':
-            return jsonify({'status': 'error', 'message': 'Record cannot be found'}), 404
-        elif check_password_hash(spa.spadmin_pass, pwd):
-            return jsonify({'status': 'error', 'message': 'This password has been used earlier'}), 400
-        elif spa.spadmin_secretword == username:
-            spa.spadmin_pass = hashed_pwd
+        send_superadmin_password_reset_email(spa)
+        return jsonify({
+        "message": "If the email exists, a reset link has been sent."
+        }), 200
+    else:
+        return jsonify({
+        "message": "email does not exist"
+        }), 200
+
+    
+
+
+@limiter.limit(laps)
+@csrf.exempt
+@admin_api_bp.route("/admin/reset-password/<token>", methods=["POST"])
+def admin_reset_password(token):
+
+    email_dict = confirm_password_reset_token(token)
+    email = email_dict.get("email")
+    if not email:
+        return jsonify({"message": "Invalid or expired token"}), 400
+
+    adm = Admin.query.filter_by(admin_email=email).first()
+    spa = Superadmin.query.filter_by(spadmin_email=email).first()
+    user = adm or spa
+    if not user:
+        return jsonify({"message": "User not found"}), 404
+
+    now = datetime.now()
+
+    # Check if user is currently locked
+    if user.reset_locked_until and now < user.reset_locked_until:
+        return jsonify({
+            "message": f"Too many attempts. Try again after {user.reset_locked_until}"
+        }), 429
+
+
+    # Check attempts within 1 minute
+    if user.reset_attempt_time and now - user.reset_attempt_time < timedelta(minutes=1):
+
+        user.reset_attempts += 1
+
+        if user.reset_attempts >= 5:
+            user.reset_locked_until = now + timedelta(minutes=15)
             db.session.commit()
-            last_admin_active(spa.spadmin_id, 'superadmin')
-            return jsonify({'status': 'success', 'message': 'Password updated successfully'}), 200
 
-    return jsonify({'status': 'error', 'message': 'Invalid email address or secret word'}), 404
+            return jsonify({
+                "message": "Too many reset attempts. Try again in 15 minutes."
+            }), 429
 
+    else:
+        # reset attempt window
+        user.reset_attempts = 1
+        user.reset_attempt_time = now
+
+    data = request.json
+    new_password = data.get("pwd")
+    hashed_password = generate_password_hash(new_password)
+
+    if adm:
+        adm.admin_pass = hashed_password
+        adm.admin_password_changed_at = datetime.now()
+        db.session.commit()
+        return jsonify({"message": "Password reset successful"})
+    elif spa:
+        spa.spadmin_pass = hashed_password
+        spa.spadmin_password_changed_at = datetime.now()
+        db.session.commit()
+        return jsonify({"message": "Password reset successful"})
+    
 
 """Admin and Superadmin Dashboard"""
 @admin_api_bp.route('/api/admin/dashboard/', methods=['GET'])

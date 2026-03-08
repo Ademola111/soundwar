@@ -15,8 +15,8 @@ from styleitapp.models import (Designer, State, Customer, Posting, Image, Commen
                                Report, Rating, Newsletter, Job, Transaction_payment, Bank, Bankcodes,
                                Follow, Login, Lga, Countries, States, Cities)
 from styleitapp.junk import styleit, spamming
-from styleitapp.mytoken import generate_activation_token, confirm_activation_code
-from styleitapp.mail_utils import send_email, send_email_alert
+from styleitapp.mytoken import generate_activation_token, confirm_activation_code, confirm_password_reset_token
+from styleitapp.mail_utils import send_customer_password_reset_email, send_email, send_email_alert, send_password_reset_email
 from styleitapp.signals import (comment_signal, reply_signal, like_signal, unlike_signal,
                                subactivate_signal, free_subactivate_signal, subdeactivate_signal, payment_signal,
                                transpay_signal, share_signal, bookappointment_signal,
@@ -1754,43 +1754,6 @@ def customer_login():
     return jsonify({'message': 'Kindly supply a valid email address and password',
                     'status': 'warning'}), 401
 
-
-"""Customer Forgotten Password"""
-@limiter.limit(laps)
-@csrf.exempt
-@user_api_bp.route('/api/user/customer/forgottenpassword', methods=['POST'])
-def customer_forgotten_password():
-    data = request.json
-    username = data.get('username')
-    email = data.get('email')
-    pwd = data.get('pwd')
-    cpwd = data.get('cpwd')
-
-    if not username or not email or not pwd or not cpwd:
-        return jsonify({'message': 'One or more fields are empty', 'status': 'warning'}), 400
-
-    if pwd != cpwd:
-        return jsonify({'message': 'Passwords do not match', 'status': 'danger'}), 400
-
-    cust = Customer.query.filter_by(cust_email=email).first()
-    if not cust:
-        return jsonify({'message': 'Invalid email address', 'status': 'danger'}), 404
-
-    if check_password_hash(cust.cust_pass, pwd):
-        return jsonify({'message': 'This password has been used earlier',
-                        'status': 'danger'}), 400
-
-    if cust.cust_username == username:
-        cust.cust_pass = generate_password_hash(pwd)
-        cust.cust_password_changed_at = datetime.now()
-        db.session.commit()
-        return jsonify({'message': 'Password updated successfully',
-                        'status': 'success', 'redirect': '/api/user/customer/login'})
-
-    return jsonify({'message': 'Invalid username or email address',
-                    'status': 'danger'}), 400
-
-
 """Customer Profile"""
 @limiter.limit(laps)
 @csrf.exempt
@@ -2626,39 +2589,6 @@ def update_designer_profile_pic():
                                 'profile_pic_url': f"https://styleitafrica.pythonanywhere.com/static/images/profile/designer/{saveas}"}), 200
 
         return jsonify({'message': 'Invalid file type'}), 400
-
-
-
-"""Designer Forgotten Password"""
-@limiter.limit(laps)
-@csrf.exempt
-@user_api_bp.route('/api/designer/forgottenpassword', methods=['POST'])
-def designer_forgotten_password():
-    data = request.json
-    busname = data.get('businessname')
-    email = data.get('email')
-    pwd = data.get('pwd')
-    cpwd = data.get('cpwd')
-
-    if not busname or not email or not pwd or not cpwd:
-        return jsonify({'error': 'One or more fields are empty'}), 400
-    if pwd != cpwd:
-        return jsonify({'error': 'Passwords do not match'}), 400
-
-    desi = Designer.query.filter(Designer.desi_email == email).first()
-    if not desi:
-        return jsonify({'error': 'Invalid business name or email address'}), 400
-
-    if check_password_hash(desi.desi_pass, pwd):
-        return jsonify({'error': 'This password has been used earlier'}), 400
-
-    if desi.desi_businessName == busname:
-        desi.desi_pass = generate_password_hash(pwd)
-        desi.desi_password_changed_at = datetime.now()
-        db.session.commit()
-        return jsonify({'message': 'Password updated successfully'}), 200
-
-    return jsonify({'error': 'Invalid business name or email address'}), 400
 
 
 """designer logout session"""
@@ -4138,6 +4068,90 @@ def last_active(id, usertype):
         db.session.commit()
     return  True
 
+
+@limiter.limit(laps)
+@csrf.exempt
+@user_api_bp.route("/api/forgot-password", methods=["POST"])
+def forgot_password():
+
+    email = request.json.get("email")
+
+    desi = Designer.query.filter_by(desi_email=email).first()
+    cust = Customer.query.filter_by(cust_email=email).first()
+    
+    if desi:
+        send_password_reset_email(desi)
+        return jsonify({
+            "message": "If the email exists, a reset link has been sent."
+        }), 200
+    elif cust:
+        send_customer_password_reset_email(cust)
+        return jsonify({
+            "message": "If the email exists, a reset link has been sent."
+        }), 200
+    else:
+        return jsonify({
+        "message": "email does not exist"
+        }), 200
+
+
+@limiter.limit(laps)
+@csrf.exempt
+@user_api_bp.route("/reset-password/<token>", methods=["POST"])
+def reset_password(token):
+
+    email_dict = confirm_password_reset_token(token)
+    email = email_dict.get("email")
+    if not email:
+        return jsonify({"message": "Invalid or expired token"}), 400
+
+    designer = Designer.query.filter_by(desi_email=email).first()
+    customer = Customer.query.filter_by(cust_email=email).first()
+    user = designer or customer
+    if not user:
+        return jsonify({"message": "User not found"}), 404
+
+    now = datetime.now()
+
+    # Check if user is currently locked
+    if user.reset_locked_until and now < user.reset_locked_until:
+        return jsonify({
+            "message": f"Too many attempts. Try again after {user.reset_locked_until}"
+        }), 429
+
+
+    # Check attempts within 1 minute
+    if user.reset_attempt_time and now - user.reset_attempt_time < timedelta(minutes=1):
+
+        user.reset_attempts += 1
+
+        if user.reset_attempts >= 5:
+            user.reset_locked_until = now + timedelta(minutes=15)
+            db.session.commit()
+
+            return jsonify({
+                "message": "Too many reset attempts. Try again in 15 minutes."
+            }), 429
+
+    else:
+        # reset attempt window
+        user.reset_attempts = 1
+        user.reset_attempt_time = now
+
+    data = request.json
+    new_password = data.get("pwd")
+    hashed_password = generate_password_hash(new_password)
+
+    if designer:
+        designer.desi_pass = hashed_password
+        designer.desi_password_changed_at = datetime.now()
+        db.session.commit()
+        return jsonify({"message": "Password reset successful"})
+    elif customer:
+        customer.cust_pass = hashed_password
+        customer.cust_password_changed_at = datetime.now()
+        db.session.commit()
+        return jsonify({"message": "Password reset successful"})
 
 
 """Rate limit exceeded handler"""

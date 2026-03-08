@@ -63,3 +63,38 @@ def confirm_activation_code(token):
         return {"valid": False, "error": "Token has expired."}
     except InvalidTokenError:
         return {"valid": False, "error": "Invalid token."}
+
+
+""" used to generate password reset tokens for users who forgot their password """
+def generate_password_reset_token(email):
+    now = datetime.now(timezone.utc)
+    exp = now + timedelta(hours=1)
+    payload = {
+        'email': email,
+        "iat": int(now.timestamp()),
+        'exp': int(exp.timestamp()),
+        'type': 'password_reset'
+    }
+    token = jwt.encode(payload, current_app.config['SECRET_KEY'], algorithm=current_app.config['JWT_ALGORITHM'])
+    if isinstance(token, bytes):
+        token = token.decode("utf-8")
+    return token
+
+def confirm_password_reset_token(token):
+    try:
+        decoded = jwt.decode(token, current_app.config['SECRET_KEY'], algorithms=[current_app.config['JWT_ALGORITHM']], options={"require": ["exp", "iat", "email"]})
+        if decoded.get('type') != 'password_reset':
+            return {"valid": False, "error": "Invalid token type."}
+        if 'email' not in decoded:
+            return {"valid": False, "error": "Email not found in token."}
+        if decoded['exp'] < int(datetime.now(timezone.utc).timestamp()):
+            return {"valid": False, "error": "Token has expired."}
+        email = decoded.get("email")
+        if not email:
+            return {"valid": False, "error": "Email not found in token."}
+        return {"valid": True, "email": email}
+
+    except ExpiredSignatureError:
+        return {"valid": False, "error": "Token has expired."}
+    except InvalidTokenError:
+        return {"valid": False, "error": "Invalid token."}

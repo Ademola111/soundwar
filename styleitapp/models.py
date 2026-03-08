@@ -46,7 +46,7 @@ class Comment(db.Model):
     com_id = db.Column(db.Integer(), primary_key=True, autoincrement=True)
     com_body = db.Column(db.Text(), nullable=True)
     com_date = db.Column(db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), index=True)
-    path = db.Column(db.Text, index=True)
+    path = db.Column(db.Text(), index=True)
     com_suspend = db.Column(db.Enum('suspended', 'unsuspended'), server_default='unsuspended')
     com_delete = db.Column(db.Enum('deleted', 'not deleted'), server_default='not deleted')
     #foreignkey
@@ -88,7 +88,7 @@ class Comment(db.Model):
     def level(self):
         return len(self.path)//self._N - 1
 
-db.Index('idx_post_path', Comment.com_postid, Comment.path)
+db.Index('idx_post_path', Comment.com_postid, Comment.path, mysql_length={"path": 255})
 
 """Customer model"""
 class Customer(db.Model):
@@ -113,6 +113,9 @@ class Customer(db.Model):
     cust_passport = db.Column(db.String(9), nullable=True)
     cust_vinpic = db.Column(db.String(255), nullable=True)
     cust_refercode = db.Column(db.String(225), nullable=True)
+    reset_attempts = db.Column(db.Integer, default=0)
+    reset_attempt_time = db.Column(db.DateTime)
+    reset_locked_until = db.Column(db.DateTime)
     
     #foreignkey
     cust_countryid = db.Column(db.Integer(), db.ForeignKey('countries.country_id'))
@@ -190,6 +193,9 @@ class Designer(db.Model):
     desi_passport = db.Column(db.String(9), nullable=True)
     desi_vinpic = db.Column(db.String(255), nullable=True)
     desi_refercode = db.Column(db.String(225), nullable=True)
+    reset_attempts = db.Column(db.Integer, default=0)
+    reset_attempt_time = db.Column(db.DateTime)
+    reset_locked_until = db.Column(db.DateTime)
     
     #foreignkey
     desi_countryid = db.Column(db.Integer(), db.ForeignKey('countries.country_id'))
@@ -286,10 +292,14 @@ class Admin (db.Model):
     admin_phone = db.Column(db.String(225), nullable=False)
     admin_email = db.Column(db.String(255), nullable=False)
     admin_pass = db.Column(db.String(255), nullable=False)
+    admin_password_changed_at = db.Column(db.DateTime, nullable=True)
     admin_address = db.Column(db.Text(), nullable=True)
     admin_secretword = db.Column(db.String(255), nullable=False)
     admin_pic = db.Column(db.String(255), nullable=True)
     admin_status = db.Column(db.Enum('active','suspended','deactive'), server_default='active')
+    reset_attempts = db.Column(db.Integer, default=0)
+    reset_attempt_time = db.Column(db.DateTime)
+    reset_locked_until = db.Column(db.DateTime)
     #Relationship
     loginadminobj = db.relationship('Login', back_populates='adminloginobj')
     adminpostobj = db.relationship('Posting', back_populates='postadminobj')
@@ -327,10 +337,14 @@ class Superadmin (db.Model):
     spadmin_phone = db.Column(db.String(225), nullable=False)
     spadmin_email = db.Column(db.String(255), nullable=False)
     spadmin_pass = db.Column(db.String(255), nullable=False)
+    spadmin_password_changed_at = db.Column(db.DateTime, nullable=True)
     spadmin_address = db.Column(db.Text(), nullable=True)
     spadmin_secretword = db.Column(db.String(255), nullable=False)
     spadmin_pic = db.Column(db.String(255), nullable=True)
     spadmin_status = db.Column(db.Enum('active','suspended','deactive'), server_default='active')
+    reset_attempts = db.Column(db.Integer, default=0)
+    reset_attempt_time = db.Column(db.DateTime)
+    reset_locked_until = db.Column(db.DateTime)
     # Relationship
     loginspadminobj = db.relationship('Login', back_populates='spadminloginobj')
     spadminpostobj = db.relationship('Posting', back_populates='postspadminobj')
