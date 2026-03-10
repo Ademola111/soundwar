@@ -191,7 +191,7 @@ def admin_forgot_password():
 
 @limiter.limit(laps)
 @csrf.exempt
-@admin_api_bp.route("/admin/reset-password/<token>", methods=["POST"])
+@admin_api_bp.route("/api/admin/reset-password/<token>", methods=["POST"])
 def admin_reset_password(token):
 
     email_dict = confirm_password_reset_token(token)
@@ -234,19 +234,30 @@ def admin_reset_password(token):
 
     data = request.json
     new_password = data.get("pwd")
+    confirm_pwd = data.get("cpwd")
+
+    if len(new_password) < 8:
+        return jsonify({'message': 'Password should be at least 8 characters long',
+                        'status': 'error'}), 400
+
+    if confirm_pwd != new_password:
+        return jsonify({"message":"password does not match", 'status': 'error'}), 400
+    
     hashed_password = generate_password_hash(new_password)
 
     if adm:
         adm.admin_pass = hashed_password
         adm.admin_password_changed_at = datetime.now()
         db.session.commit()
-        return jsonify({"message": "Password reset successful"})
+        return jsonify({"message": "Password reset successful"}), 200
     elif spa:
         spa.spadmin_pass = hashed_password
         spa.spadmin_password_changed_at = datetime.now()
         db.session.commit()
-        return jsonify({"message": "Password reset successful"})
-    
+        return jsonify({"message": "Password reset successful"}), 200
+    else:
+        return jsonify({"message": "Password reset unsuccessful"}), 404
+
 
 """Admin and Superadmin Dashboard"""
 @admin_api_bp.route('/api/admin/dashboard/', methods=['GET'])

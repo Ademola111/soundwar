@@ -4097,7 +4097,7 @@ def forgot_password():
 
 @limiter.limit(laps)
 @csrf.exempt
-@user_api_bp.route("/reset-password/<token>", methods=["POST"])
+@user_api_bp.route("/api/reset-password/<token>", methods=["POST"])
 def reset_password(token):
 
     email_dict = confirm_password_reset_token(token)
@@ -4140,18 +4140,29 @@ def reset_password(token):
 
     data = request.json
     new_password = data.get("pwd")
+    confirm_pwd = data.get("cpwd")
+
+    if len(new_password) < 8:
+        return jsonify({'message': 'Password should be at least 8 characters long',
+                        'status': 'error'}), 400
+
+    if confirm_pwd != new_password:
+        return jsonify({"message":"password does not match", 'status': 'error'}), 400
+    
     hashed_password = generate_password_hash(new_password)
 
     if designer:
         designer.desi_pass = hashed_password
         designer.desi_password_changed_at = datetime.now()
         db.session.commit()
-        return jsonify({"message": "Password reset successful"})
+        return jsonify({"message": "Password reset successful"}), 200
     elif customer:
         customer.cust_pass = hashed_password
         customer.cust_password_changed_at = datetime.now()
         db.session.commit()
-        return jsonify({"message": "Password reset successful"})
+        return jsonify({"message": "Password reset successful"}), 200
+    else:
+        return jsonify({"message": "Password reset unsuccessful"}), 404
 
 
 """Rate limit exceeded handler"""
