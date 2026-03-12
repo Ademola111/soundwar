@@ -2997,9 +2997,10 @@ def apipaystack():
             tpay.tpay_status = 'paid'
             bk.ba_paystatus = 'paid'
             db.session.commit()
-            return jsonify({'message': 'Transaction payment successful', 'status': 'paid',
-                            'amount': amt, 'ip': ipaddress}), 200
-
+            # return jsonify({'message': 'Transaction payment successful', 'status': 'paid',
+                            # 'amount': amt, 'ip': ipaddress}), 200
+            return redirect(f'localhost:5173/client/payverify?trxref={tpay.tpay_transNo}& reference={tpay.tpay_transNo}'), 302
+        
     else:
         p = Payment.query.filter_by(payment_transNo=reference).first()
         tpay = Transaction_payment.query.filter_by(tpay_transNo=reference).first()
