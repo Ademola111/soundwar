@@ -1,6 +1,6 @@
 """to start an app"""
 import sys
-from styleitapp import create_app
+from soundwarapp import create_app
 import unittest
 
 app = create_app("production")
@@ -16,6 +16,3 @@ if __name__ == "__main__":
         run_tests()
     else:
         app.run(debug=True, port=8080)
-    # socketio.run(app)
-    # sio.run(app, debug=True)
-    

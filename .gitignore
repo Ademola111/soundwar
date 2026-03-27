@@ -1,32 +1,26 @@
-styleitapp/junk.py
-styleitapp/__pycache__/junk.cpython-311.pyc
-styleitapp/__pycache__/
-tests/__pycache__/
-vstyleit/
-bank.sql
-text.txt
-banks.csv
-banks.sql
-bb.sql
-requirement.txt
-response1.txt
-response.txt
-new text
-__pycache__/
-.pytest_cache/
-styleitapp/the_init_correct.py
-styleitapp/static/
-styleitapp/migrations/__pycache__/
-styleitapp/migrations/versions/__pycache__/
-migrations/versions/0c3f234f96bb_.py
-migrations/versions/82e220e38539_.py
-migrations/versions/a4752b825476_.py
-migrations/versions/0c3f234f96bb_.py
-migrations/versions/641fde62bbeb_added_new_fields.py
-migrations/versions/f439ef740be1_added_user_table.py
-home ui-ux.png
-git
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
 
-ADMIN_TEST_SUITE_DOCUMENTATION.md
+node_modules
+dist
+dist-ssr
+*.local
 
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
 
+vsound/

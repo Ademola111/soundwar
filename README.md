@@ -1,73 +1,73 @@
-# Styleit Africa
+# Welcome to your Lovable project
 
-A modern web platform that connects fashion designers with clients, enabling designers to showcase their collections and clients to book appointments seamlessly.
+## Project info
 
-![description](src/images/home_description.png)
+**URL**: https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID
 
-## Overview
+## How can I edit this code?
 
-This platform serves as a bridge between fashion designers and potential clients, providing an elegant space for designers to present their work and for clients to schedule consultations or fittings.
+There are several ways of editing your application.
 
-![join us](src/images/join.png)
-## Features
+**Use Lovable**
 
-### For Designers
-- **Portfolio Management**: Upload and organize fashion designs with high-quality images
-- **Client Communication**: Receive and respond to booking requests
-- **Profile Customization**: Showcase expertise and style specialties
-### For Clients
-- **Design Gallery**: Browse designer portfolios and collections
-- **Designer Discovery**: Search and filter designers by name or location
-- **Easy Booking**: Schedule appointments directly through the platform
-- **Appointment Management**: View, modify, or cancel bookings
+Simply visit the [Lovable Project](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and start prompting.
 
-## Technology Stack
+Changes made via Lovable will be committed automatically to this repo.
 
-- Frontend: React.js 
-- Backend: python
-- Database: mysql
-- Authentication: JWT
-- Payment Integration: paystack
-- Postman client
-  
-## Usage
-Seek for authorization before clone, fork or any form of useage to prevent lawsuit.
+**Use your preferred IDE**
 
-### For Designers
-1. Register and create your designer profile
-2. Upload your designs for clients to view and increase appointment scheduling rates
-4. Receive and manage booking requests from clients
+If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
 
-### For Clients
-1. Browse the designer gallery
-2. View designer profile and designs
-3. Select a designer 
-4. Submit booking request
-5. Receive confirmation and appointment details
+The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
 
+Follow these steps:
 
+```sh
+# Step 1: Clone the repository using the project's Git URL.
+git clone <YOUR_GIT_URL>
 
-## Installation
+# Step 2: Navigate to the project directory.
+cd <YOUR_PROJECT_NAME>
 
-```bash
-# Clone the repository
-git clone [repository-url]
+# Step 3: Install the necessary dependencies.
+npm i
 
-# Install dependencies
-requirements.txt
-
-
-# Run the development server
-python -m run setup.py
-
-
-## Contributing as a team
-
-1. Create a feature branch (`git checkout -b feature/AmazingFeature`)
-2. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
-3. Push to the branch (`git push origin feature/AmazingFeature`)
-4. assign a team member to review the branch before merging to the master branch
-5. make a pull request
-
+# Step 4: Start the development server with auto-reloading and an instant preview.
+npm run dev
 ```
-**Note**: This is an active project under development. Features and documentation are subjected to changes.
+
+**Edit a file directly in GitHub**
+
+- Navigate to the desired file(s).
+- Click the "Edit" button (pencil icon) at the top right of the file view.
+- Make your changes and commit the changes.
+
+**Use GitHub Codespaces**
+
+- Navigate to the main page of your repository.
+- Click on the "Code" button (green button) near the top right.
+- Select the "Codespaces" tab.
+- Click on "New codespace" to launch a new Codespace environment.
+- Edit files directly within the Codespace and commit and push your changes once you're done.
+
+## What technologies are used for this project?
+
+This project is built with:
+
+- Vite
+- TypeScript
+- React
+- shadcn-ui
+- Tailwind CSS
+
+## How can I deploy this project?
+
+Simply open [Lovable](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and click on Share -> Publish.
+
+## Can I connect a custom domain to my Lovable project?
+
+Yes, you can!
+
+To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
+
+Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
