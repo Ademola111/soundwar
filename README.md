@@ -40,7 +40,7 @@ npm run dev
 
 ## Admin account setup
 
-Set `ADMIN_SETUP_KEY` in the backend environment before starting Flask. On PowerShell, for example:
+Set `SECRET_KEY`, `JWT_SECRET_KEY`, `SECURITY_PASSWORD_SALT`, `ADMIN_SETUP_KEY`, `FLUTTERWAVE_SECRET_KEY`, `FLUTTERWAVE_PUBLIC_KEY`, `FLUTTERWAVE_ENCRYPTION_KEY`, `MAIL_USERNAME`, and `MAIL_PASSWORD` in the backend environment. Keep these values out of source control. On PowerShell, for example:
 
 ```powershell
 $env:ADMIN_SETUP_KEY = "replace-with-a-long-random-secret"
