@@ -1,4 +1,6 @@
-# Welcome to your Lovable project
+# soundwar
+
+A web app for music competition
 
 ## Project info
 
