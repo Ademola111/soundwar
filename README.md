@@ -36,6 +36,16 @@ npm i
 npm run dev
 ```
 
+## Admin account setup
+
+Set `ADMIN_SETUP_KEY` in the backend environment before starting Flask. On PowerShell, for example:
+
+```powershell
+$env:ADMIN_SETUP_KEY = "replace-with-a-long-random-secret"
+```
+
+Open `/admin/register` and enter that key to create the first administrator account. The endpoint is disabled without the key and closes after the first admin is created. Admins sign in at `/admin/login`; the regular `/register` endpoint cannot create admin accounts. Keep the setup key private and do not commit it.
+
 **Edit a file directly in GitHub**
 
 - Navigate to the desired file(s).
@@ -71,3 +81,8 @@ Yes, you can!
 To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
 
 Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+
+#1. admin dashboard eye button to view user profile and update status to deactivate and activate user
+#2. to update payment status
+#3. what should be in setting icon, manage contest, trigger winners reminder, reveu=nue update figure, user profile and profile pic update.
+#4. change dollar sign to naira

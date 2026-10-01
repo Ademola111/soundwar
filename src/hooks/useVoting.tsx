@@ -1,5 +1,6 @@
-import { createContext, useContext, useState, useEffect, ReactNode } from "react";
+import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from "react";
 import { API_ENDPOINTS, getAuthHeaders } from "@/config/api";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface VoteInfo {
   hasVoted: boolean;
@@ -12,7 +13,7 @@ interface VotingContextType {
   voteInfo: VoteInfo;
   isLoading: boolean;
   castVote: (songId: string) => Promise<{ success: boolean; error?: string }>;
-  checkVoteStatus: () => Promise<void>;
+  checkVoteStatus: (showLoading?: boolean) => Promise<void>;
   isVoteDisabled: boolean;
 }
 
@@ -26,57 +27,49 @@ const defaultVoteInfo: VoteInfo = {
 const VotingContext = createContext<VotingContextType | undefined>(undefined);
 
 export const VotingProvider = ({ children }: { children: ReactNode }) => {
+  const { token } = useAuth();
   const [voteInfo, setVoteInfo] = useState<VoteInfo>(defaultVoteInfo);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
 
   // Check user's vote status on mount
-  const checkVoteStatus = async () => {
-    const token = localStorage.getItem("auth_token");
+  const checkVoteStatus = useCallback(async (showLoading = true) => {
     if (!token) {
       setVoteInfo(defaultVoteInfo);
+      localStorage.removeItem("user_vote");
+      setIsLoading(false);
       return;
     }
 
-    setIsLoading(true);
+    if (showLoading) {
+      setIsLoading(true);
+      setVoteInfo(defaultVoteInfo);
+    }
     try {
       const response = await fetch(API_ENDPOINTS.VOTES.MY_VOTE, {
         headers: getAuthHeaders(token),
       });
 
-      if (response.ok) {
-        const data = await response.json();
-        if (data.has_voted) {
-          setVoteInfo({
-            hasVoted: true,
-            votedSongId: data.vote?.song_id?.toString() || null,
-            votedAt: data.vote?.voted_at || null,
-            contestId: data.vote?.contest_id?.toString() || null,
-          });
-        } else {
-          setVoteInfo(defaultVoteInfo);
-        }
+      if (!response.ok) {
+        throw new Error("Could not check your vote status.");
       }
+
+      const data = await response.json() as {
+        vote?: { song_id?: number; created_at?: string; contest_id?: number } | null;
+      };
+      const vote = data.vote;
+      setVoteInfo(vote ? {
+        hasVoted: true,
+        votedSongId: vote.song_id?.toString() || null,
+        votedAt: vote.created_at || null,
+        contestId: vote.contest_id?.toString() || null,
+      } : defaultVoteInfo);
     } catch (error) {
       console.error("Failed to check vote status:", error);
-      // For demo: check localStorage fallback
-      const storedVote = localStorage.getItem("user_vote");
-      if (storedVote) {
-        try {
-          const parsed = JSON.parse(storedVote);
-          setVoteInfo({
-            hasVoted: true,
-            votedSongId: parsed.songId,
-            votedAt: parsed.votedAt,
-            contestId: parsed.contestId,
-          });
-        } catch {
-          setVoteInfo(defaultVoteInfo);
-        }
-      }
+      if (showLoading) setVoteInfo(defaultVoteInfo);
     } finally {
-      setIsLoading(false);
+      if (showLoading) setIsLoading(false);
     }
-  };
+  }, [token]);
 
   const castVote = async (songId: string): Promise<{ success: boolean; error?: string }> => {
     const token = localStorage.getItem("auth_token");
@@ -107,45 +100,41 @@ export const VotingProvider = ({ children }: { children: ReactNode }) => {
         const newVoteInfo = {
           hasVoted: true,
           votedSongId: songId,
-          votedAt: new Date().toISOString(),
-          contestId: data.vote?.contest_id?.toString() || "1",
+          votedAt: data.vote?.created_at || new Date().toISOString(),
+          contestId: data.vote?.contest_id?.toString() || null,
         };
         setVoteInfo(newVoteInfo);
-        
-        // Store in localStorage as fallback for demo
-        localStorage.setItem("user_vote", JSON.stringify({
-          songId,
-          votedAt: newVoteInfo.votedAt,
-          contestId: newVoteInfo.contestId,
-        }));
+        localStorage.removeItem("user_vote");
 
         return { success: true };
       } else {
+        if (response.status === 409) {
+          setVoteInfo({
+            hasVoted: true,
+            votedSongId: data.voted_song_id?.toString() || null,
+            votedAt: null,
+            contestId: null,
+          });
+        }
         return { success: false, error: data.error || "Failed to cast vote" };
       }
-    } catch (error) {
-      // For demo: simulate successful vote
-      const newVoteInfo = {
-        hasVoted: true,
-        votedSongId: songId,
-        votedAt: new Date().toISOString(),
-        contestId: "1",
-      };
-      setVoteInfo(newVoteInfo);
-      localStorage.setItem("user_vote", JSON.stringify({
-        songId,
-        votedAt: newVoteInfo.votedAt,
-        contestId: newVoteInfo.contestId,
-      }));
-      return { success: true };
+    } catch {
+      return { success: false, error: "Unable to reach the voting service. Please try again." };
     } finally {
       setIsLoading(false);
     }
   };
 
   useEffect(() => {
-    checkVoteStatus();
-  }, []);
+    void checkVoteStatus();
+    if (!token) return;
+
+    const refreshInterval = window.setInterval(() => {
+      void checkVoteStatus(false);
+    }, 30_000);
+
+    return () => window.clearInterval(refreshInterval);
+  }, [checkVoteStatus, token]);
 
   return (
     <VotingContext.Provider

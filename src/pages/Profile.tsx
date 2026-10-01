@@ -1,113 +1,229 @@
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import { 
-  User, 
-  Music, 
-  Vote, 
-  TrendingUp, 
-  DollarSign, 
-  Calendar,
-  Play,
-  Heart,
-  Award,
-  Settings,
-  LogOut
-} from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Badge } from "@/components/ui/badge";
-import { Progress } from "@/components/ui/progress";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { Award, CalendarDays, Camera, LayoutDashboard, LogOut, Music2, Save, Settings, Vote, X } from "lucide-react";
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { useAuth } from "@/contexts/AuthContext";
 import { API_ENDPOINTS, getAuthHeaders } from "@/config/api";
+import { useToast } from "@/hooks/use-toast";
 
-// Mock data for demo - will be replaced with API calls
-const mockUser = {
-  id: "1",
-  email: "user@example.com",
-  username: "musiclover",
-  roles: ["user"] as const,
-  created_at: "2024-01-15",
+type VoteHistoryItem = {
+  id: number;
+  song_id: number;
+  song_title: string | null;
+  artist_id: number | null;
+  artist_name: string | null;
+  contest_id: number;
+  contest_title: string | null;
+  created_at: string | null;
 };
 
-const mockArtist = {
-  id: "2",
-  email: "artist@example.com",
-  username: "starproducer",
-  roles: ["artist"] as const,
-  artist_profile: {
-    id: "a1",
-    stage_name: "Star Producer",
-    bio: "Award-winning producer with 10+ years of experience",
-    avatar_url: "",
-    total_votes: 1250,
-    total_earnings: 2500,
-  },
-  created_at: "2024-01-10",
+type ArtistSong = {
+  id: number;
+  title: string;
+  status: string;
+  vote_count: number;
+  created_at: string | null;
 };
-
-const mockVotingHistory = [
-  { id: "1", song_title: "Midnight Dreams", artist_name: "Luna Echo", voted_at: "2024-03-15", position: 3 },
-  { id: "2", song_title: "Electric Soul", artist_name: "Neon Pulse", voted_at: "2024-03-10", position: 7 },
-  { id: "3", song_title: "Ocean Waves", artist_name: "Tide Master", voted_at: "2024-03-05", position: 12 },
-  { id: "4", song_title: "City Lights", artist_name: "Metro Beat", voted_at: "2024-02-28", position: 5 },
-];
-
-const mockArtistSongs = [
-  { id: "1", title: "Summer Vibes", plays: 15420, votes: 342, status: "approved", earnings: 850, uploaded_at: "2024-02-01" },
-  { id: "2", title: "Moonlight Sonata Remix", plays: 8930, votes: 189, status: "approved", earnings: 472, uploaded_at: "2024-02-15" },
-  { id: "3", title: "Urban Jungle", plays: 0, votes: 0, status: "pending", earnings: 0, uploaded_at: "2024-03-18" },
-];
 
 const Profile = () => {
   const navigate = useNavigate();
-  const [isLoading, setIsLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState("overview");
-  
-  // For demo purposes, toggle between user and artist view
-  const [demoRole, setDemoRole] = useState<"user" | "artist">("artist");
-  const isArtist = demoRole === "artist";
-  const currentUser = isArtist ? mockArtist : mockUser;
+  const { user, token, isLoading, logout, refreshUser } = useAuth();
+  const { toast } = useToast();
+  const [voteHistory, setVoteHistory] = useState<VoteHistoryItem[]>([]);
+  const [artistSongs, setArtistSongs] = useState<ArtistSong[]>([]);
+  const [isLoadingActivity, setIsLoadingActivity] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [showEditor, setShowEditor] = useState(false);
+  const [profileImageFile, setProfileImageFile] = useState<File | null>(null);
+  const [profileForm, setProfileForm] = useState({
+    name: "",
+    username: "",
+    stage_name: "",
+    genre: "",
+    bio: "",
+    profile_image: "",
+  });
+
+  const isAdmin = Boolean(user?.roles.includes("admin"));
+  const isArtist = !isAdmin && (Boolean(user?.artist_profile) || Boolean(user?.roles.includes("artist")));
+  const artist = user?.artist_profile;
+  const profileImage = isArtist
+    ? artist?.profile_image || user?.profile_image || ""
+    : user?.profile_image || "";
 
   useEffect(() => {
-    // Simulate loading
-    const timer = setTimeout(() => setIsLoading(false), 500);
-    return () => clearTimeout(timer);
-  }, []);
+    if (!user) return;
+    setProfileForm({
+      name: user.name || "",
+      username: user.username || "",
+      stage_name: artist?.stage_name || "",
+      genre: artist?.genre || "",
+      bio: artist?.bio || "",
+      profile_image: profileImage,
+    });
+  }, [user, artist, profileImage]);
+
+  useEffect(() => {
+    if (!token || isAdmin) {
+      setVoteHistory([]);
+      return;
+    }
+    let active = true;
+
+    const loadActivity = async () => {
+      setIsLoadingActivity(true);
+      const requests = [
+        fetch(API_ENDPOINTS.VOTES.MY_HISTORY, { headers: getAuthHeaders(token) }),
+        ...(isArtist
+          ? [fetch(API_ENDPOINTS.SONGS.MY_SUBMISSIONS, { headers: getAuthHeaders(token) })]
+          : []),
+      ];
+
+      try {
+        const responses = await Promise.all(requests);
+        if (!active) return;
+
+        if (responses[0].ok) {
+          const data = await responses[0].json();
+          setVoteHistory(data.votes || []);
+        }
+        if (isArtist && responses[1]?.ok) {
+          const data = await responses[1].json();
+          setArtistSongs(data.songs || []);
+        }
+      } catch (error) {
+        console.error("Failed to load profile activity", error);
+      } finally {
+        if (active) setIsLoadingActivity(false);
+      }
+    };
+
+    loadActivity();
+    return () => {
+      active = false;
+    };
+  }, [token, isArtist, isAdmin]);
 
   const handleLogout = () => {
-    localStorage.removeItem("auth_token");
+    logout();
     navigate("/");
   };
 
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-      case "approved":
-        return <Badge className="bg-primary/20 text-primary border-primary/30">Approved</Badge>;
-      case "pending":
-        return <Badge className="bg-yellow-500/20 text-yellow-400 border-yellow-500/30">Pending</Badge>;
-      case "rejected":
-        return <Badge className="bg-destructive/20 text-destructive border-destructive/30">Rejected</Badge>;
-      default:
-        return <Badge variant="secondary">{status}</Badge>;
+  const handleSaveProfile = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!token || !user) return;
+
+    const cleanedName = profileForm.name.trim();
+    const cleanedUsername = profileForm.username.trim();
+    if (!cleanedName || cleanedName.length > 100) {
+      toast({ title: "Invalid name", description: "Enter a name of 1 to 100 characters.", variant: "destructive" });
+      return;
+    }
+    if (!/^[a-zA-Z0-9_]{3,30}$/.test(cleanedUsername)) {
+      toast({ title: "Invalid username", description: "Use 3 to 30 letters, numbers, or underscores.", variant: "destructive" });
+      return;
+    }
+    if (isArtist && !artist && !profileForm.stage_name.trim()) {
+      toast({ title: "Stage name required", description: "Enter an artist stage name to create your artist profile.", variant: "destructive" });
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      const userForm = new FormData();
+      userForm.append("name", cleanedName);
+      userForm.append("username", cleanedUsername);
+      if (!isArtist) {
+        if (profileImageFile) userForm.append("profile_image", profileImageFile);
+        else userForm.append("profile_image", profileForm.profile_image);
+      }
+
+      const userResponse = await fetch(API_ENDPOINTS.AUTH.PROFILE, {
+        method: "PUT",
+        headers: { Authorization: `Bearer ${token}` },
+        body: userForm,
+      });
+      const userData = await userResponse.json().catch(() => ({}));
+      if (!userResponse.ok) {
+        throw new Error(userData.error || "Unable to update your account details.");
+      }
+
+      if (isArtist) {
+        const artistDetails = {
+          stage_name: profileForm.stage_name.trim(),
+          genre: profileForm.genre.trim(),
+          bio: profileForm.bio.trim(),
+          profile_image: profileForm.profile_image.trim(),
+        };
+        const artistResponse = await fetch(
+          artist ? API_ENDPOINTS.ARTISTS.PROFILE : API_ENDPOINTS.ARTISTS.CREATE,
+          {
+            method: artist ? "PUT" : "POST",
+            headers: getAuthHeaders(token),
+            body: JSON.stringify(artist ? artistDetails : artistDetails),
+          },
+        );
+        const artistData = await artistResponse.json().catch(() => ({}));
+        if (!artistResponse.ok) {
+          throw new Error(artistData.error || "Unable to update the artist profile.");
+        }
+
+        if (profileImageFile) {
+          const imageForm = new FormData();
+          imageForm.append("profile_image", profileImageFile);
+          const imageResponse = await fetch(API_ENDPOINTS.ARTISTS.PROFILE_IMAGE, {
+            method: "POST",
+            headers: { Authorization: `Bearer ${token}` },
+            body: imageForm,
+          });
+          const imageData = await imageResponse.json().catch(() => ({}));
+          if (!imageResponse.ok) {
+            throw new Error(imageData.error || "Unable to upload the artist photo.");
+          }
+        }
+      }
+
+      await refreshUser();
+      setProfileImageFile(null);
+      setShowEditor(false);
+      toast({ title: "Profile saved", description: "Your profile changes have been saved." });
+    } catch (error) {
+      toast({
+        title: "Could not save profile",
+        description: error instanceof Error ? error.message : "Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSaving(false);
     }
   };
 
   if (isLoading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="animate-pulse text-primary">Loading...</div>
+        <p className="text-muted-foreground">Loading profile...</p>
+      </div>
+    );
+  }
+
+  if (!user || !token) {
+    return (
+      <div className="min-h-screen bg-background">
+        <Navbar />
+        <main className="container mx-auto px-4 pt-32 pb-20">
+          <Card className="mx-auto max-w-lg">
+            <CardHeader><CardTitle>Sign in to view your profile</CardTitle></CardHeader>
+            <CardContent><Button onClick={() => navigate("/login")}>Go to sign in</Button></CardContent>
+          </Card>
+        </main>
+        <Footer />
       </div>
     );
   }
@@ -115,394 +231,185 @@ const Profile = () => {
   return (
     <div className="min-h-screen bg-background">
       <Navbar />
-      
-      <main className="container mx-auto px-4 pt-24 pb-16">
-        {/* Demo Toggle */}
-        <div className="mb-6 p-4 glass rounded-lg">
-          <p className="text-sm text-muted-foreground mb-2">Demo Mode: Switch view</p>
-          <div className="flex gap-2">
-            <Button 
-              variant={demoRole === "user" ? "default" : "outline"} 
-              size="sm"
-              onClick={() => setDemoRole("user")}
-            >
-              Voter View
-            </Button>
-            <Button 
-              variant={demoRole === "artist" ? "default" : "outline"} 
-              size="sm"
-              onClick={() => setDemoRole("artist")}
-            >
-              Artist View
-            </Button>
-          </div>
-        </div>
-
-        {/* Profile Header */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="mb-8"
-        >
-          <Card className="glass border-border/50">
-            <CardContent className="p-6">
-              <div className="flex flex-col md:flex-row items-start md:items-center gap-6">
-                <Avatar className="h-24 w-24 border-2 border-primary">
-                  <AvatarImage src={isArtist ? mockArtist.artist_profile.avatar_url : ""} />
-                  <AvatarFallback className="bg-primary/20 text-primary text-2xl">
-                    {isArtist ? mockArtist.artist_profile.stage_name[0] : mockUser.username[0].toUpperCase()}
-                  </AvatarFallback>
-                </Avatar>
-                
-                <div className="flex-1">
-                  <div className="flex items-center gap-3 mb-2">
-                    <h1 className="text-3xl font-bold">
-                      {isArtist ? mockArtist.artist_profile.stage_name : mockUser.username}
-                    </h1>
-                    <Badge className={isArtist ? "bg-accent/20 text-accent" : "bg-primary/20 text-primary"}>
-                      {isArtist ? "Artist" : "Voter"}
-                    </Badge>
-                  </div>
-                  {isArtist && (
-                    <p className="text-muted-foreground mb-3">{mockArtist.artist_profile.bio}</p>
-                  )}
-                  <p className="text-sm text-muted-foreground">
-                    Member since {new Date(currentUser.created_at).toLocaleDateString()}
-                  </p>
+      <main className="container mx-auto max-w-5xl px-4 pb-16 pt-24">
+        <motion.section initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}>
+          <Card className="mb-6 border-border/60">
+            <CardContent className="flex flex-col gap-5 p-6 sm:flex-row sm:items-center">
+              <Avatar className="h-20 w-20 border-2 border-primary">
+                <AvatarImage src={profileImage} alt={isArtist ? artist?.stage_name : user.name || user.username} />
+                <AvatarFallback>{(isArtist ? artist?.stage_name?.[0] : user.name?.[0] || user.username[0])?.toUpperCase() || "U"}</AvatarFallback>
+              </Avatar>
+              <div className="min-w-0 flex-1">
+                <div className="mb-1 flex flex-wrap items-center gap-2">
+                  <h1 className="text-2xl font-semibold">{isArtist ? artist?.stage_name || "Artist profile" : user.name || user.username}</h1>
+                  <Badge variant={isArtist ? "default" : "secondary"}>{isAdmin ? "Admin" : isArtist ? "Artist" : "Voter"}</Badge>
                 </div>
-
-                <div className="flex gap-2">
-                  <Button variant="outline" size="sm">
-                    <Settings className="h-4 w-4 mr-2" />
-                    Settings
+                <p className="text-sm text-muted-foreground">@{user.username} · {user.email}</p>
+                {isArtist && artist?.genre && <p className="mt-1 text-sm text-muted-foreground">{artist.genre}</p>}
+                <p className="mt-2 flex items-center gap-1 text-xs text-muted-foreground">
+                  <CalendarDays className="h-3.5 w-3.5" /> Joined {user.created_at ? new Date(user.created_at).toLocaleDateString() : "recently"}
+                </p>
+              </div>
+              <div className="flex gap-2">
+                <Button variant="outline" onClick={() => setShowEditor((open) => !open)}>
+                  {showEditor ? <X className="mr-2 h-4 w-4" /> : <Settings className="mr-2 h-4 w-4" />}
+                  {showEditor ? "Close editor" : "Edit profile"}
+                </Button>
+                {isAdmin && (
+                  <Button variant="default" onClick={() => navigate("/admin")}>
+                    <LayoutDashboard className="mr-2 h-4 w-4" />Dashboard
                   </Button>
-                  <Button variant="outline" size="sm" onClick={handleLogout}>
-                    <LogOut className="h-4 w-4 mr-2" />
-                    Logout
-                  </Button>
-                </div>
+                )}
+                <Button variant="ghost" size="icon" aria-label="Sign out" onClick={handleLogout}>
+                  <LogOut className="h-4 w-4" />
+                </Button>
               </div>
             </CardContent>
           </Card>
-        </motion.div>
+        </motion.section>
 
-        {/* Stats Cards */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 }}
-          className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8"
-        >
-          {isArtist ? (
-            <>
-              <Card className="glass border-border/50">
-                <CardContent className="p-4">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 rounded-lg bg-primary/20">
-                      <Music className="h-5 w-5 text-primary" />
-                    </div>
-                    <div>
-                      <p className="text-2xl font-bold">{mockArtistSongs.length}</p>
-                      <p className="text-xs text-muted-foreground">Songs</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-              <Card className="glass border-border/50">
-                <CardContent className="p-4">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 rounded-lg bg-accent/20">
-                      <Heart className="h-5 w-5 text-accent" />
-                    </div>
-                    <div>
-                      <p className="text-2xl font-bold">{mockArtist.artist_profile.total_votes.toLocaleString()}</p>
-                      <p className="text-xs text-muted-foreground">Total Votes</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-              <Card className="glass border-border/50">
-                <CardContent className="p-4">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 rounded-lg bg-green-500/20">
-                      <Play className="h-5 w-5 text-green-400" />
-                    </div>
-                    <div>
-                      <p className="text-2xl font-bold">
-                        {mockArtistSongs.reduce((sum, s) => sum + s.plays, 0).toLocaleString()}
-                      </p>
-                      <p className="text-xs text-muted-foreground">Total Plays</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-              <Card className="glass border-border/50">
-                <CardContent className="p-4">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 rounded-lg bg-yellow-500/20">
-                      <DollarSign className="h-5 w-5 text-yellow-400" />
-                    </div>
-                    <div>
-                      <p className="text-2xl font-bold">${mockArtist.artist_profile.total_earnings.toLocaleString()}</p>
-                      <p className="text-xs text-muted-foreground">Earnings</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </>
-          ) : (
-            <>
-              <Card className="glass border-border/50">
-                <CardContent className="p-4">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 rounded-lg bg-primary/20">
-                      <Vote className="h-5 w-5 text-primary" />
-                    </div>
-                    <div>
-                      <p className="text-2xl font-bold">{mockVotingHistory.length}</p>
-                      <p className="text-xs text-muted-foreground">Votes Cast</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-              <Card className="glass border-border/50">
-                <CardContent className="p-4">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 rounded-lg bg-accent/20">
-                      <Award className="h-5 w-5 text-accent" />
-                    </div>
-                    <div>
-                      <p className="text-2xl font-bold">2</p>
-                      <p className="text-xs text-muted-foreground">Winners Picked</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-              <Card className="glass border-border/50">
-                <CardContent className="p-4">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 rounded-lg bg-green-500/20">
-                      <TrendingUp className="h-5 w-5 text-green-400" />
-                    </div>
-                    <div>
-                      <p className="text-2xl font-bold">Top 10</p>
-                      <p className="text-xs text-muted-foreground">Best Pick</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-              <Card className="glass border-border/50">
-                <CardContent className="p-4">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 rounded-lg bg-yellow-500/20">
-                      <Calendar className="h-5 w-5 text-yellow-400" />
-                    </div>
-                    <div>
-                      <p className="text-2xl font-bold">3</p>
-                      <p className="text-xs text-muted-foreground">Contests</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </>
-          )}
-        </motion.div>
-
-        {/* Content Tabs */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2 }}
-        >
-          <Tabs value={activeTab} onValueChange={setActiveTab}>
-            <TabsList className="glass mb-6">
-              <TabsTrigger value="overview">Overview</TabsTrigger>
-              {isArtist ? (
-                <>
-                  <TabsTrigger value="songs">My Songs</TabsTrigger>
-                  <TabsTrigger value="earnings">Earnings</TabsTrigger>
-                </>
-              ) : (
-                <TabsTrigger value="votes">Voting History</TabsTrigger>
-              )}
-            </TabsList>
-
-            <TabsContent value="overview">
-              <Card className="glass border-border/50">
-                <CardHeader>
-                  <CardTitle>{isArtist ? "Performance Overview" : "Activity Overview"}</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  {isArtist ? (
-                    <div className="space-y-6">
-                      <div>
-                        <div className="flex justify-between mb-2">
-                          <span className="text-sm text-muted-foreground">Contest Progress</span>
-                          <span className="text-sm font-medium">65%</span>
-                        </div>
-                        <Progress value={65} className="h-2" />
-                      </div>
-                      <div className="grid md:grid-cols-2 gap-4">
-                        <div className="p-4 rounded-lg bg-secondary/50">
-                          <h4 className="font-medium mb-2">Top Performing Song</h4>
-                          <p className="text-primary font-semibold">Summer Vibes</p>
-                          <p className="text-sm text-muted-foreground">342 votes • 15.4k plays</p>
-                        </div>
-                        <div className="p-4 rounded-lg bg-secondary/50">
-                          <h4 className="font-medium mb-2">Current Ranking</h4>
-                          <p className="text-primary font-semibold">#5</p>
-                          <p className="text-sm text-muted-foreground">Up 2 positions this week</p>
-                        </div>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="space-y-4">
-                      <p className="text-muted-foreground">
-                        Your voting activity helps determine the winners of our music competitions.
-                        Keep discovering and supporting great music!
-                      </p>
-                      <div className="p-4 rounded-lg bg-secondary/50">
-                        <h4 className="font-medium mb-2">Your Latest Vote</h4>
-                        <p className="text-primary font-semibold">{mockVotingHistory[0].song_title}</p>
-                        <p className="text-sm text-muted-foreground">
-                          by {mockVotingHistory[0].artist_name} • Currently #{mockVotingHistory[0].position}
-                        </p>
-                      </div>
-                    </div>
+        {showEditor && (
+          <motion.section initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
+            <Card className="mb-6">
+              <CardHeader><CardTitle>Edit profile</CardTitle></CardHeader>
+              <CardContent>
+                <form onSubmit={handleSaveProfile} className="grid gap-4 md:grid-cols-2">
+                  <label className="space-y-2 text-sm">
+                    <span className="text-muted-foreground">Full name</span>
+                    <Input value={profileForm.name} onChange={(event) => setProfileForm((form) => ({ ...form, name: event.target.value }))} maxLength={100} required />
+                  </label>
+                  <label className="space-y-2 text-sm">
+                    <span className="text-muted-foreground">Username</span>
+                    <Input value={profileForm.username} onChange={(event) => setProfileForm((form) => ({ ...form, username: event.target.value }))} minLength={3} maxLength={30} required />
+                  </label>
+                  {isArtist && (
+                    <>
+                      <label className="space-y-2 text-sm">
+                        <span className="text-muted-foreground">Artist stage name</span>
+                        <Input value={profileForm.stage_name} onChange={(event) => setProfileForm((form) => ({ ...form, stage_name: event.target.value }))} maxLength={100} required />
+                      </label>
+                      <label className="space-y-2 text-sm">
+                        <span className="text-muted-foreground">Genre</span>
+                        <Input value={profileForm.genre} onChange={(event) => setProfileForm((form) => ({ ...form, genre: event.target.value }))} maxLength={50} />
+                      </label>
+                      <label className="space-y-2 text-sm md:col-span-2">
+                        <span className="text-muted-foreground">Artist bio</span>
+                        <textarea value={profileForm.bio} onChange={(event) => setProfileForm((form) => ({ ...form, bio: event.target.value }))} maxLength={1000} rows={4} className="w-full resize-y rounded-md border border-input bg-background px-3 py-2 text-sm" />
+                      </label>
+                    </>
                   )}
-                </CardContent>
-              </Card>
-            </TabsContent>
+                  <label className="space-y-2 text-sm md:col-span-2">
+                    <span className="text-muted-foreground">Profile photo URL (optional)</span>
+                    <Input type="url" value={profileForm.profile_image} onChange={(event) => setProfileForm((form) => ({ ...form, profile_image: event.target.value }))} placeholder="https://example.com/photo.jpg" />
+                  </label>
+                  <label className="flex cursor-pointer items-center gap-3 rounded-md border border-dashed border-border p-4 text-sm md:col-span-2">
+                    <Camera className="h-5 w-5 text-muted-foreground" />
+                    <span className="min-w-0 flex-1">{profileImageFile ? profileImageFile.name : "Upload a JPG, PNG, or WebP photo (max 5 MB)"}</span>
+                    <input type="file" accept="image/jpeg,image/png,image/webp" className="sr-only" onChange={(event) => setProfileImageFile(event.target.files?.[0] || null)} />
+                  </label>
+                  <div className="flex justify-end md:col-span-2">
+                    <Button type="submit" disabled={isSaving}>
+                      <Save className="mr-2 h-4 w-4" />{isSaving ? "Saving..." : "Save changes"}
+                    </Button>
+                  </div>
+                </form>
+              </CardContent>
+            </Card>
+          </motion.section>
+        )}
 
-            {isArtist && (
-              <>
-                <TabsContent value="songs">
-                  <Card className="glass border-border/50">
-                    <CardHeader className="flex flex-row items-center justify-between">
-                      <CardTitle>My Songs</CardTitle>
-                      <Button onClick={() => navigate("/submit")}>
-                        <Music className="h-4 w-4 mr-2" />
-                        Submit New Song
-                      </Button>
-                    </CardHeader>
-                    <CardContent>
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead>Title</TableHead>
-                            <TableHead>Status</TableHead>
-                            <TableHead className="text-right">Plays</TableHead>
-                            <TableHead className="text-right">Votes</TableHead>
-                            <TableHead className="text-right">Earnings</TableHead>
-                            <TableHead>Uploaded</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {mockArtistSongs.map((song) => (
-                            <TableRow key={song.id}>
-                              <TableCell className="font-medium">{song.title}</TableCell>
-                              <TableCell>{getStatusBadge(song.status)}</TableCell>
-                              <TableCell className="text-right">{song.plays.toLocaleString()}</TableCell>
-                              <TableCell className="text-right">{song.votes.toLocaleString()}</TableCell>
-                              <TableCell className="text-right">${song.earnings}</TableCell>
-                              <TableCell className="text-muted-foreground">
-                                {new Date(song.uploaded_at).toLocaleDateString()}
-                              </TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    </CardContent>
-                  </Card>
-                </TabsContent>
-
-                <TabsContent value="earnings">
-                  <Card className="glass border-border/50">
-                    <CardHeader>
-                      <CardTitle>Earnings Breakdown</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="space-y-6">
-                        <div className="grid md:grid-cols-3 gap-4">
-                          <div className="p-4 rounded-lg bg-secondary/50 text-center">
-                            <p className="text-3xl font-bold text-primary">${mockArtist.artist_profile.total_earnings}</p>
-                            <p className="text-sm text-muted-foreground">Total Earnings</p>
-                          </div>
-                          <div className="p-4 rounded-lg bg-secondary/50 text-center">
-                            <p className="text-3xl font-bold text-green-400">$1,322</p>
-                            <p className="text-sm text-muted-foreground">Available to Withdraw</p>
-                          </div>
-                          <div className="p-4 rounded-lg bg-secondary/50 text-center">
-                            <p className="text-3xl font-bold text-yellow-400">$1,178</p>
-                            <p className="text-sm text-muted-foreground">Already Withdrawn</p>
-                          </div>
+        {isArtist ? (
+          <section className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]">
+            <Card>
+              <CardHeader><CardTitle className="flex items-center gap-2"><Music2 className="h-5 w-5" /> Artist profile</CardTitle></CardHeader>
+              <CardContent className="space-y-4">
+                {artist ? (
+                  <>
+                    <div className="flex flex-wrap gap-2">
+                      <Badge variant={artist.is_verified ? "default" : "secondary"}>{artist.is_verified ? "Verified" : "Verification pending"}</Badge>
+                      <Badge variant={artist.is_paid ? "default" : "outline"}>{artist.is_paid ? "Paid" : "Payment pending"}</Badge>
+                    </div>
+                    <p className="text-sm leading-6 text-muted-foreground">{artist.bio || "Add a short bio using Edit profile."}</p>
+                    {artist.can_participate === false && (
+                      <p className="text-sm text-destructive">Past-winner cooldown: {artist.months_until_eligible || 0} months remaining.</p>
+                    )}
+                  </>
+                ) : (
+                  <div className="space-y-3">
+                    <p className="text-sm text-muted-foreground">This artist account has no profile yet. Add a stage name and save using Edit profile to create it.</p>
+                    <Button variant="outline" onClick={() => setShowEditor(true)}>Create artist profile</Button>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between">
+                <CardTitle>My submissions</CardTitle>
+                <Button variant="outline" size="sm" onClick={() => navigate("/submit")}>Submit a song</Button>
+              </CardHeader>
+              <CardContent>
+                {isLoadingActivity ? <p className="text-sm text-muted-foreground">Loading submissions...</p> : artistSongs.length ? (
+                  <div className="divide-y divide-border">
+                    {artistSongs.map((song) => (
+                      <div key={song.id} className="flex flex-wrap items-center justify-between gap-3 py-3 first:pt-0 last:pb-0">
+                        <div>
+                          <p className="font-medium">{song.title}</p>
+                          <p className="text-xs text-muted-foreground">{song.created_at ? new Date(song.created_at).toLocaleDateString() : "Date unavailable"}</p>
                         </div>
-                        <Table>
-                          <TableHeader>
-                            <TableRow>
-                              <TableHead>Song</TableHead>
-                              <TableHead className="text-right">Earnings</TableHead>
-                              <TableHead>Period</TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {mockArtistSongs.filter(s => s.earnings > 0).map((song) => (
-                              <TableRow key={song.id}>
-                                <TableCell className="font-medium">{song.title}</TableCell>
-                                <TableCell className="text-right text-primary">${song.earnings}</TableCell>
-                                <TableCell className="text-muted-foreground">Contest Q1 2024</TableCell>
-                              </TableRow>
-                            ))}
-                          </TableBody>
-                        </Table>
+                        <div className="flex items-center gap-3">
+                          <Badge variant={song.status === "approved" ? "default" : "secondary"}>{song.status}</Badge>
+                          <span className="text-sm text-muted-foreground">{song.vote_count} votes</span>
+                        </div>
                       </div>
-                    </CardContent>
-                  </Card>
-                </TabsContent>
-              </>
-            )}
-
-            {!isArtist && (
-              <TabsContent value="votes">
-                <Card className="glass border-border/50">
-                  <CardHeader>
-                    <CardTitle>Voting History</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Song</TableHead>
-                          <TableHead>Artist</TableHead>
-                          <TableHead className="text-center">Current Position</TableHead>
-                          <TableHead>Voted On</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {mockVotingHistory.map((vote) => (
-                          <TableRow key={vote.id}>
-                            <TableCell className="font-medium">{vote.song_title}</TableCell>
-                            <TableCell>{vote.artist_name}</TableCell>
-                            <TableCell className="text-center">
-                              <Badge variant="outline" className="text-primary border-primary/30">
-                                #{vote.position}
-                              </Badge>
-                            </TableCell>
-                            <TableCell className="text-muted-foreground">
-                              {new Date(vote.voted_at).toLocaleDateString()}
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </CardContent>
-                </Card>
-              </TabsContent>
-            )}
-          </Tabs>
-        </motion.div>
+                    ))}
+                  </div>
+                ) : <p className="text-sm text-muted-foreground">No song submissions yet.</p>}
+              </CardContent>
+            </Card>
+          </section>
+        ) : isAdmin ? (
+          <section>
+            <Card className="max-w-2xl">
+              <CardHeader><CardTitle className="flex items-center gap-2"><LayoutDashboard className="h-5 w-5" /> Administrator access</CardTitle></CardHeader>
+              <CardContent className="space-y-4">
+                <p className="text-sm text-muted-foreground">Your account has administrator access. Open the dashboard to manage users, songs, contests, and payments.</p>
+                <Button onClick={() => navigate("/admin")}>
+                  <LayoutDashboard className="mr-2 h-4 w-4" />Open admin dashboard
+                </Button>
+              </CardContent>
+            </Card>
+          </section>
+        ) : (
+          <section className="grid gap-6 lg:grid-cols-[240px_minmax(0,1fr)]">
+            <Card>
+              <CardHeader><CardTitle>Voting activity</CardTitle></CardHeader>
+              <CardContent className="space-y-3">
+                <div className="flex items-center gap-3"><Vote className="h-5 w-5 text-primary" /><span><strong>{voteHistory.length}</strong> votes cast</span></div>
+                <div className="flex items-center gap-3"><Award className="h-5 w-5 text-accent" /><span><strong>{new Set(voteHistory.map((vote) => vote.contest_id)).size}</strong> seasons participated</span></div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader><CardTitle>Artists you voted for</CardTitle></CardHeader>
+              <CardContent>
+                {isLoadingActivity ? <p className="text-sm text-muted-foreground">Loading vote history...</p> : voteHistory.length ? (
+                  <div className="divide-y divide-border">
+                    {voteHistory.map((vote) => (
+                      <div key={vote.id} className="grid gap-1 py-3 first:pt-0 last:pb-0 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)_auto] sm:items-center sm:gap-4">
+                        <div className="min-w-0">
+                          <p className="truncate font-medium">{vote.artist_name || "Artist unavailable"}</p>
+                          <p className="truncate text-sm text-muted-foreground">{vote.song_title || "Song unavailable"}</p>
+                        </div>
+                        <p className="text-sm text-muted-foreground">{vote.contest_title || `Season ${vote.contest_id}`}</p>
+                        <p className="text-xs text-muted-foreground">{vote.created_at ? new Date(vote.created_at).toLocaleDateString() : "Date unavailable"}</p>
+                      </div>
+                    ))}
+                  </div>
+                ) : <p className="text-sm text-muted-foreground">No votes have been recorded for this account yet.</p>}
+              </CardContent>
+            </Card>
+          </section>
+        )}
       </main>
-
       <Footer />
     </div>
   );

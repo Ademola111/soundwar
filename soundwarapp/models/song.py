@@ -53,7 +53,8 @@ class Song(db.Model):
             data['artist'] = {
                 'id': self.artist.id,
                 'stage_name': self.artist.stage_name,
-                'profile_image': self.artist.profile_image
+                'profile_image': self.artist.profile_image,
+                'genre': self.artist.genre
             }
         
         return data

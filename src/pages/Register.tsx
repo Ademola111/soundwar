@@ -1,28 +1,41 @@
 import { motion, AnimatePresence } from "framer-motion";
 import { useState } from "react";
-import { Music2, User, Mail, Lock, Mic2, Users, CreditCard, Check, DollarSign, AlertTriangle, Shield } from "lucide-react";
+import { Music2, User, Mail, Lock, Mic2, Users, CreditCard, Check, AlertTriangle, Shield } from "lucide-react";
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Link } from "react-router-dom";
-import { API_ENDPOINTS, APP_CONFIG, FLUTTERWAVE_CONFIG, VALIDATION, sanitizeInput } from "@/config/api";
+import { API_ENDPOINTS, APP_CONFIG, FLUTTERWAVE_CONFIG, VALIDATION, VALIDATION_PATTERNS, sanitizeInput, getAuthHeaders } from "@/config/api";
 import { useToast } from "@/hooks/use-toast";
 
 type UserType = "artist" | "voter";
 type RegistrationStep = "details" | "payment" | "success" | "blocked";
+type RegistrationResponse = {
+  error?: string;
+  message?: string;
+  requires_activation?: boolean;
+  can_participate?: boolean;
+  requires_payment?: boolean;
+};
 
 // Security: Form validation
 const validateForm = (data: typeof initialFormData, userType: UserType): string | null => {
   if (!data.name.trim() || data.name.length > VALIDATION.NAME_MAX_LENGTH) {
     return "Please enter a valid name (max 100 characters)";
   }
+  if (!data.username || !data.username.trim() || !VALIDATION_PATTERNS.username.test(data.username)) {
+    return "Please choose a valid username (3-30 characters; letters, numbers, underscores)";
+  }
   if (!VALIDATION.EMAIL_REGEX.test(data.email)) {
     return "Please enter a valid email address";
   }
   if (data.password.length < VALIDATION.PASSWORD_MIN_LENGTH) {
     return `Password must be at least ${VALIDATION.PASSWORD_MIN_LENGTH} characters`;
+  }
+  if (!VALIDATION_PATTERNS.password.test(data.password)) {
+    return "Password must contain uppercase, lowercase, a number, and a special character";
   }
   if (data.password !== data.confirmPassword) {
     return "Passwords do not match";
@@ -40,6 +53,7 @@ const validateForm = (data: typeof initialFormData, userType: UserType): string 
 
 const initialFormData = {
   name: "",
+  username: "",
   email: "",
   password: "",
   confirmPassword: "",
@@ -53,6 +67,7 @@ const Register = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [formData, setFormData] = useState(initialFormData);
   const [isWinner, setIsWinner] = useState(false);
+  const [requiresActivation, setRequiresActivation] = useState(false);
   const { toast } = useToast();
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -75,6 +90,7 @@ const Register = () => {
       // Sanitize inputs before sending
       const sanitizedData = {
         name: sanitizeInput(formData.name),
+        username: sanitizeInput(formData.username),
         email: sanitizeInput(formData.email),
         password: formData.password, // Don't sanitize password
         role: userType,
@@ -87,29 +103,47 @@ const Register = () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(sanitizedData),
       });
-      
-      const data = await response.json();
-      
+
+      let data: RegistrationResponse = {};
+      try {
+        data = await response.json();
+      } catch (e) {
+        const text = await response.text().catch(() => "");
+        console.error("Register response (non-json):", text);
+        // Put raw text into an error field so the toast shows it
+        data = text ? { error: text } : {};
+      }
+
+      if (!response.ok) {
+        toast({
+          title: "Registration failed",
+          description: data.error || data.message || "Unable to create your account right now.",
+          variant: "destructive",
+        });
+        return;
+      }
+
       // Security: Check if artist is a past winner (blocked from participation)
-      if (data.is_past_winner) {
+      if (userType === "artist" && data.can_participate === false) {
         setIsWinner(true);
         setStep("blocked");
         return;
       }
       
-      if (data.requires_payment && userType === "artist") {
+      if (data.requires_activation) {
+        setRequiresActivation(true);
+        setStep("success");
+      } else if (data.requires_payment && userType === "artist") {
         setStep("payment");
       } else {
         setStep("success");
       }
     } catch (error) {
-      console.log("Registration - will connect to backend:", { userType });
-      // For demo: proceed to payment step for artists
-      if (userType === "artist") {
-        setStep("payment");
-      } else {
-        setStep("success");
-      }
+      toast({
+        title: "Registration failed",
+        description: "Unable to complete registration. Please try again later.",
+        variant: "destructive",
+      });
     } finally {
       setIsLoading(false);
     }
@@ -123,37 +157,40 @@ const Register = () => {
       const txRef = `SW-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
       
       // Initialize Flutterwave payment
+      const authToken = localStorage.getItem("auth_token");
       const response = await fetch(API_ENDPOINTS.PAYMENTS.INITIALIZE, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: getAuthHeaders(authToken || undefined),
         body: JSON.stringify({ 
           contest_id: 1,
           tx_ref: txRef,
-          amount: APP_CONFIG.ARTIST_REGISTRATION_FEE,
-          currency: APP_CONFIG.CURRENCY,
           redirect_url: `${window.location.origin}/payment/success`,
-          customer: {
-            email: sanitizeInput(formData.email),
-            name: sanitizeInput(formData.name),
-          },
-          customizations: {
-            title: "SoundWars Artist Registration",
-            description: "Contest participation fee",
-            logo: `${window.location.origin}/favicon.ico`,
-          },
+          email: sanitizeInput(formData.email),
+          fullname: sanitizeInput(formData.name),
         }),
       });
       
-      const data = await response.json();
+      const data = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        toast({
+          title: "Payment initialization failed",
+          description: data.error || data.message || "Unable to start payment right now.",
+          variant: "destructive",
+        });
+        return;
+      }
       
       if (data.payment_link) {
         // Redirect to Flutterwave payment page
         window.location.href = data.payment_link;
       }
     } catch (error) {
-      console.log("Payment - will connect to Flutterwave:", { fee: APP_CONFIG.ARTIST_REGISTRATION_FEE });
-      // For demo: proceed to success
-      setStep("success");
+      toast({
+        title: "Payment initialization failed",
+        description: "Unable to start payment right now. Please try again.",
+        variant: "destructive",
+      });
     } finally {
       setIsLoading(false);
     }
@@ -239,7 +276,7 @@ const Register = () => {
                   >
                     <div className="flex items-start gap-3">
                       <div className="w-10 h-10 rounded-lg bg-accent/20 flex items-center justify-center flex-shrink-0">
-                        <DollarSign className="w-5 h-5 text-accent" />
+                        <span className="text-xl font-semibold leading-none text-accent">₦</span>
                       </div>
                       <div>
                         <h3 className="font-semibold text-sm mb-1">Artist Registration Fee</h3>
@@ -266,6 +303,24 @@ const Register = () => {
                         required
                       />
                     </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="username">Username</Label>
+                    <div className="relative">
+                      <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                      <Input
+                        id="username"
+                        placeholder="Choose a username"
+                        className="pl-10"
+                        value={formData.username}
+                        onChange={(e) => setFormData({ ...formData, username: e.target.value })}
+                        required
+                      />
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Username should be 3-30 characters and may contain letters, numbers, and underscores.
+                    </p>
                   </div>
 
                   <div className="space-y-2">
@@ -328,6 +383,9 @@ const Register = () => {
                         required
                       />
                     </div>
+                    <p className="text-xs text-muted-foreground">
+                      Password must be at least {VALIDATION.PASSWORD_MIN_LENGTH} characters and include uppercase, lowercase, a number, and a special character.
+                    </p>
                   </div>
 
                   <div className="space-y-2">
@@ -519,14 +577,22 @@ const Register = () => {
                   </h1>
                   
                   <p className="text-muted-foreground mb-8">
-                    {userType === "artist" 
+                    {requiresActivation
+                      ? "Your account was created. Check your email and activate your account before signing in."
+                      : userType === "artist" 
                       ? "Your registration is complete. You can now upload your track and compete for the title!"
                       : "Your account has been created. Start exploring and vote for your favorite songs!"
                     }
                   </p>
 
                   <div className="space-y-3">
-                    {userType === "artist" ? (
+                    {requiresActivation ? (
+                      <Link to="/login">
+                        <Button variant="hero" size="lg" className="w-full">
+                          Go to Login
+                        </Button>
+                      </Link>
+                    ) : userType === "artist" ? (
                       <Link to="/submit">
                         <Button variant="hero" size="lg" className="w-full">
                           Upload Your Track

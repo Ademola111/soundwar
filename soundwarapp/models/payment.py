@@ -6,11 +6,12 @@ from soundwarapp import db
 
 
 class Payment(db.Model):
-    """Payment record for artist registration"""
+    """Payment record for contest registration."""
     __tablename__ = 'payments'
     
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    contest_id = db.Column(db.Integer, db.ForeignKey('contests.id'), nullable=True)
     
     # Flutterwave transaction details
     transaction_id = db.Column(db.String(100), unique=True, nullable=False)
@@ -26,7 +27,7 @@ class Payment(db.Model):
     payment_type = db.Column(db.String(50), nullable=True)
     
     # Purpose
-    payment_purpose = db.Column(db.String(50), default='artist_registration')
+    payment_purpose = db.Column(db.String(50), default='contest_registration')
     
     # Timestamps
     created_at = db.Column(db.DateTime, default=datetime.now)
@@ -34,12 +35,14 @@ class Payment(db.Model):
     
     # Relationship
     user = db.relationship('User', backref='payments')
+    contest = db.relationship('Contest', backref='payments')
     
     def to_dict(self):
         """Convert to dictionary for JSON response"""
         return {
             'id': self.id,
             'user_id': self.user_id,
+            'contest_id': self.contest_id,
             'transaction_id': self.transaction_id,
             'tx_ref': self.tx_ref,
             'amount': float(self.amount),

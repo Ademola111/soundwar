@@ -1,11 +1,13 @@
 import { motion } from "framer-motion";
-import { Trophy, Play, Pause, TrendingUp, TrendingDown, Minus, Check, Lock, Heart } from "lucide-react";
-import { useState } from "react";
+import { Trophy, Play, Pause, TrendingUp, TrendingDown, Minus, Check, Lock, Heart, Music2, RefreshCw } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
 import { Button } from "@/components/ui/button";
 import { useVoting } from "@/hooks/useVoting";
 import { useToast } from "@/hooks/use-toast";
+import { API_ENDPOINTS } from "@/config/api";
+import { useQuery } from "@tanstack/react-query";
 
 interface Song {
   id: string;
@@ -13,69 +15,63 @@ interface Song {
   previousRank: number;
   title: string;
   artist: string;
-  artistAvatar: string;
-  cover: string;
+  artistAvatar: string | null;
+  cover: string | null;
+  audioUrl: string;
+  duration: number | null;
   votes: number;
   percentageOfTotal: number;
 }
 
-const mockLeaderboard: Song[] = [
-  {
-    id: "1",
-    rank: 1,
-    previousRank: 1,
-    title: "Midnight Dreams",
-    artist: "Luna Wave",
-    artistAvatar: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=100&h=100&fit=crop",
-    cover: "https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=400&h=400&fit=crop",
-    votes: 2847,
-    percentageOfTotal: 18.5,
-  },
-  {
-    id: "2",
-    rank: 2,
-    previousRank: 3,
-    title: "Electric Soul",
-    artist: "Neon Beats",
-    artistAvatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100&h=100&fit=crop",
-    cover: "https://images.unsplash.com/photo-1514320291840-2e0a9bf2a9ae?w=400&h=400&fit=crop",
-    votes: 2456,
-    percentageOfTotal: 15.9,
-  },
-  {
-    id: "3",
-    rank: 3,
-    previousRank: 2,
-    title: "Starlight",
-    artist: "Cosmic Echo",
-    artistAvatar: "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&h=100&fit=crop",
-    cover: "https://images.unsplash.com/photo-1511379938547-c1f69419868d?w=400&h=400&fit=crop",
-    votes: 2134,
-    percentageOfTotal: 13.8,
-  },
-  {
-    id: "4",
-    rank: 4,
-    previousRank: 5,
-    title: "Urban Rhythm",
-    artist: "Street Harmony",
-    artistAvatar: "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=100&h=100&fit=crop",
-    cover: "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=400&h=400&fit=crop",
-    votes: 1987,
-    percentageOfTotal: 12.9,
-  },
-  {
-    id: "5",
-    rank: 5,
-    previousRank: 4,
-    title: "Ocean Waves",
-    artist: "Surf Sound",
-    artistAvatar: "https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=100&h=100&fit=crop",
-    cover: "https://images.unsplash.com/photo-1459749411175-04bf5292ceea?w=400&h=400&fit=crop",
-    votes: 1756,
-    percentageOfTotal: 11.4,
-  },
-];
+interface ApiLeaderboardSong {
+  id: number;
+  title: string;
+  audio_url: string;
+  cover_image: string | null;
+  duration: number | null;
+  vote_count: number;
+  artist?: {
+    stage_name: string;
+    profile_image: string | null;
+  } | null;
+}
+
+interface ApiLeaderboardResponse {
+  leaderboard: Array<{
+    rank: number;
+    vote_count: number;
+    song: ApiLeaderboardSong;
+  }>;
+  contest: { title: string; phase: string } | null;
+}
+
+const resolveMediaUrl = (url: string | null | undefined) => {
+  if (!url) return null;
+  return new URL(url, new URL(API_ENDPOINTS.SONGS.BASE).origin).toString();
+};
+
+const fetchLeaderboard = async (signal?: AbortSignal) => {
+  const response = await fetch(API_ENDPOINTS.LEADERBOARD.BASE, { signal });
+  if (!response.ok) throw new Error("Could not load the competition leaderboard.");
+
+  const data = await response.json() as ApiLeaderboardResponse;
+  const totalVotes = data.leaderboard.reduce((total, item) => total + item.vote_count, 0);
+  const songs = data.leaderboard.map(({ rank, vote_count, song }) => ({
+    id: String(song.id),
+    rank,
+    previousRank: rank,
+    title: song.title,
+    artist: song.artist?.stage_name || "Unknown artist",
+    artistAvatar: resolveMediaUrl(song.artist?.profile_image),
+    cover: resolveMediaUrl(song.cover_image || song.artist?.profile_image),
+    audioUrl: resolveMediaUrl(song.audio_url) || song.audio_url,
+    duration: song.duration,
+    votes: vote_count,
+    percentageOfTotal: totalVotes ? Math.round((vote_count / totalVotes) * 1000) / 10 : 0,
+  }));
+
+  return { songs, contest: data.contest };
+};
 
 const getRankStyles = (rank: number) => {
   switch (rank) {
@@ -98,8 +94,24 @@ const getTrendIcon = (current: number, previous: number) => {
 
 const Leaderboard = () => {
   const [playingId, setPlayingId] = useState<string | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
   const { voteInfo, castVote, isLoading, isVoteDisabled } = useVoting();
   const { toast } = useToast();
+  const {
+    data: leaderboardData,
+    isLoading: isLoadingLeaderboard,
+    isError,
+    error,
+    refetch,
+  } = useQuery({
+    queryKey: ["leaderboard"],
+    queryFn: () => fetchLeaderboard(),
+    refetchInterval: 30_000,
+  });
+  const leaderboard = leaderboardData?.songs || [];
+  const podiumSongs = leaderboard.length >= 3
+    ? [leaderboard[1], leaderboard[0], leaderboard[2]]
+    : leaderboard.slice(0, 3);
 
   const handleVote = async (songId: string) => {
     // Security: Prevent voting if already voted
@@ -115,6 +127,7 @@ const Leaderboard = () => {
     const result = await castVote(songId);
     
     if (result.success) {
+      await refetch();
       toast({
         title: "Vote Cast Successfully!",
         description: "Thank you for voting. Your vote has been recorded.",
@@ -123,6 +136,30 @@ const Leaderboard = () => {
       toast({
         title: "Vote Failed",
         description: result.error || "Unable to cast vote. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handlePlayback = async (song: Song) => {
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    if (playingId === song.id) {
+      audio.pause();
+      setPlayingId(null);
+      return;
+    }
+
+    audio.pause();
+    audio.src = song.audioUrl;
+    try {
+      await audio.play();
+      setPlayingId(song.id);
+    } catch {
+      toast({
+        title: "Playback failed",
+        description: "This track could not be played right now.",
         variant: "destructive",
       });
     }
@@ -179,7 +216,9 @@ const Leaderboard = () => {
               Competition <span className="text-gradient-primary">Leaderboard</span>
             </h1>
             <p className="text-muted-foreground max-w-xl mx-auto">
-              See which tracks are leading the competition in real-time
+              {leaderboardData?.contest
+                ? `${leaderboardData.contest.title} · updated live`
+                : "See which tracks are leading the competition in real-time"}
             </p>
             {isVoteDisabled && (
               <div className="mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 text-primary">
@@ -189,6 +228,25 @@ const Leaderboard = () => {
             )}
           </motion.div>
 
+          {isLoadingLeaderboard ? (
+            <p className="py-12 text-center text-muted-foreground" role="status">Loading live rankings...</p>
+          ) : isError ? (
+            <div className="py-12 text-center" role="alert">
+              <p className="text-muted-foreground">
+                {error instanceof Error ? error.message : "Could not load the competition leaderboard."}
+              </p>
+              <Button variant="outline" className="mt-4" onClick={() => void refetch()}>
+                <RefreshCw className="w-4 h-4 mr-2" /> Try again
+              </Button>
+            </div>
+          ) : leaderboard.length === 0 ? (
+            <div className="py-12 text-center text-muted-foreground">
+              <Trophy className="w-10 h-10 mx-auto mb-3 opacity-60" />
+              <p className="font-medium text-foreground">No approved songs yet</p>
+              <p className="text-sm mt-1">Rankings will appear when tracks are approved for the active contest.</p>
+            </div>
+          ) : (
+          <>
           {/* Top 3 Podium */}
           <motion.div
             initial={{ opacity: 0, y: 30 }}
@@ -196,10 +254,8 @@ const Leaderboard = () => {
             transition={{ delay: 0.1 }}
             className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12 max-w-4xl mx-auto"
           >
-            {mockLeaderboard.slice(0, 3).map((song, index) => {
-              const order = [1, 0, 2]; // Center is first place
-              const displaySong = mockLeaderboard[order[index]];
-              const isFirst = order[index] === 0;
+            {podiumSongs.map((displaySong, index) => {
+              const isFirst = displaySong.rank === 1;
               const isVotedSong = voteInfo.votedSongId === displaySong.id;
               
               return (
@@ -214,11 +270,25 @@ const Leaderboard = () => {
                     {displaySong.rank}
                   </div>
                   <div className="relative">
-                    <img
-                      src={displaySong.cover}
-                      alt={displaySong.title}
-                      className={`w-24 h-24 mx-auto rounded-xl object-cover mb-4 ${isFirst ? "ring-4 ring-primary/50" : ""}`}
-                    />
+                    {displaySong.cover ? (
+                      <img
+                        src={displaySong.cover}
+                        alt={`${displaySong.title} cover art`}
+                        className={`w-24 h-24 mx-auto rounded-xl object-cover mb-4 ${isFirst ? "ring-4 ring-primary/50" : ""}`}
+                      />
+                    ) : (
+                      <div className={`w-24 h-24 mx-auto rounded-xl bg-primary/10 flex items-center justify-center mb-4 ${isFirst ? "ring-4 ring-primary/50" : ""}`}>
+                        <Music2 className="w-9 h-9 text-primary" />
+                      </div>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => void handlePlayback(displaySong)}
+                      aria-label={`${playingId === displaySong.id ? "Pause" : "Play"} ${displaySong.title}`}
+                      className="absolute bottom-6 right-[calc(50%-3.5rem)] w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center"
+                    >
+                      {playingId === displaySong.id ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4 ml-0.5" />}
+                    </button>
                     {isVotedSong && (
                       <div className="absolute -top-2 -right-2 bg-primary text-primary-foreground w-8 h-8 rounded-full flex items-center justify-center">
                         <Check className="w-4 h-4" />
@@ -254,7 +324,7 @@ const Leaderboard = () => {
                 <div className="col-span-1"></div>
               </div>
               
-              {mockLeaderboard.map((song, index) => {
+              {leaderboard.map((song, index) => {
                 const isVotedSong = voteInfo.votedSongId === song.id;
                 
                 return (
@@ -270,7 +340,8 @@ const Leaderboard = () => {
                     </div>
                     <div className="col-span-1">
                       <button
-                        onClick={() => setPlayingId(playingId === song.id ? null : song.id)}
+                        onClick={() => void handlePlayback(song)}
+                        aria-label={`${playingId === song.id ? "Pause" : "Play"} ${song.title}`}
                         className="w-10 h-10 rounded-full bg-primary/20 hover:bg-primary flex items-center justify-center transition-colors group"
                       >
                         {playingId === song.id ? (
@@ -282,11 +353,13 @@ const Leaderboard = () => {
                     </div>
                     <div className="col-span-5 flex items-center gap-3">
                       <div className="relative">
-                        <img
-                          src={song.cover}
-                          alt={song.title}
-                          className="w-12 h-12 rounded-lg object-cover"
-                        />
+                        {song.cover ? (
+                          <img src={song.cover} alt={`${song.title} cover art`} className="w-12 h-12 rounded-lg object-cover" />
+                        ) : (
+                          <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center">
+                            <Music2 className="w-5 h-5 text-primary" />
+                          </div>
+                        )}
                         {isVotedSong && (
                           <div className="absolute -top-1 -right-1 bg-primary text-primary-foreground w-5 h-5 rounded-full flex items-center justify-center">
                             <Check className="w-3 h-3" />
@@ -316,6 +389,9 @@ const Leaderboard = () => {
               })}
             </div>
           </motion.div>
+          </>
+          )}
+          <audio ref={audioRef} className="hidden" onEnded={() => setPlayingId(null)} />
         </div>
       </main>
       <Footer />

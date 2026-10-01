@@ -7,19 +7,26 @@
  */
 
 // Environment detection
-const isDevelopment = import.meta.env.DEV;
-const isProduction = import.meta.env.PROD;
+// const isDevelopment = import.meta.env.DEV;
+// const isDevelopment = "http://127.0.1.0:8080/api";
+// const isProduction = import.meta.env.PROD;
+const isProduction = "http://127.0.0.1:5000/api"
 
 // API Base URLs - Update these when deploying
 const API_URLS = {
-  development: "http://localhost:5000/api",
-  production: import.meta.env.VITE_API_BASE_URL || "https://your-production-api.com/api",
+  production: "http://127.0.0.1:5000/api",
+  development: "http://127.0.0.1:5000/api",
+  // development: "http://localhost:5000/api",
+  // production: import.meta.env.VITE_API_BASE_URL || "https://your-production-api.com/api",
 };
 
 // Current API Base URL
-export const API_BASE_URL = isDevelopment 
-  ? API_URLS.development 
-  : API_URLS.production;
+export const API_BASE_URL = isProduction 
+  ? API_URLS.production 
+  : API_URLS.development;
+// export const API_BASE_URL = isDevelopment 
+//   ? API_URLS.development 
+//   : API_URLS.production;
 
 // Flutterwave Configuration
 export const FLUTTERWAVE_CONFIG = {
@@ -35,12 +42,17 @@ export const API_ENDPOINTS = {
   AUTH: {
     REGISTER: `${API_BASE_URL}/auth/register`,
     LOGIN: `${API_BASE_URL}/auth/login`,
+    ADMIN_REGISTER: `${API_BASE_URL}/auth/admin/register`,
+    ADMIN_LOGIN: `${API_BASE_URL}/auth/admin/login`,
     LOGOUT: `${API_BASE_URL}/auth/logout`,
     ME: `${API_BASE_URL}/auth/me`,
+    PROFILE: `${API_BASE_URL}/auth/profile`,
     REFRESH: `${API_BASE_URL}/auth/refresh`,
     FORGOT_PASSWORD: `${API_BASE_URL}/auth/forgot-password`,
     RESET_PASSWORD: `${API_BASE_URL}/auth/reset-password`,
     VERIFY_RESET_TOKEN: `${API_BASE_URL}/auth/verify-reset-token`,
+    ACTIVATE: `${API_BASE_URL}/auth/activate`,
+    RESEND_ACTIVATION: `${API_BASE_URL}/auth/resend-activation`,
   },
   
   // Users
@@ -54,6 +66,9 @@ export const API_ENDPOINTS = {
   ARTISTS: {
     BASE: `${API_BASE_URL}/artists`,
     DETAIL: (id: string) => `${API_BASE_URL}/artists/${id}`,
+    CREATE: `${API_BASE_URL}/artists/create`,
+    PROFILE: `${API_BASE_URL}/artists/profile`,
+    PROFILE_IMAGE: `${API_BASE_URL}/artists/profile/image`,
     SONGS: (id: string) => `${API_BASE_URL}/artists/${id}/songs`,
     CHECK_WINNER: (id: string) => `${API_BASE_URL}/artists/${id}/winner-status`,
   },
@@ -62,6 +77,7 @@ export const API_ENDPOINTS = {
   SONGS: {
     BASE: `${API_BASE_URL}/songs`,
     DETAIL: (id: string) => `${API_BASE_URL}/songs/${id}`,
+    MY_SUBMISSIONS: `${API_BASE_URL}/songs/my-submissions`,
     UPLOAD: `${API_BASE_URL}/songs/upload`,
     APPROVE: (id: string) => `${API_BASE_URL}/songs/${id}/approve`,
     REJECT: (id: string) => `${API_BASE_URL}/songs/${id}/reject`,
@@ -70,9 +86,10 @@ export const API_ENDPOINTS = {
   // Votes
   VOTES: {
     BASE: `${API_BASE_URL}/votes`,
-    CAST: `${API_BASE_URL}/votes`,
+    CAST: `${API_BASE_URL}/votes/cast`,
     CHECK: (songId: string) => `${API_BASE_URL}/votes/check/${songId}`,
     MY_VOTE: `${API_BASE_URL}/votes/my-vote`,
+    MY_HISTORY: `${API_BASE_URL}/votes/my-history`,
     HAS_VOTED: `${API_BASE_URL}/votes/has-voted`,
   },
   
@@ -101,19 +118,25 @@ export const API_ENDPOINTS = {
   // Admin
   ADMIN: {
     DASHBOARD: `${API_BASE_URL}/admin/dashboard`,
+    ANALYTICS: `${API_BASE_URL}/admin/analytics`,
     USERS: `${API_BASE_URL}/admin/users`,
     PENDING_SONGS: `${API_BASE_URL}/admin/songs/pending`,
+    APPROVE: (id: string) => `${API_BASE_URL}/admin/songs/${id}/approve`,
+    REJECT: (id: string) => `${API_BASE_URL}/admin/songs/${id}/reject`,
     CONTESTS: `${API_BASE_URL}/admin/contests`,
+    CONTEST_PHASE: (id: number) => `${API_BASE_URL}/admin/contests/${id}/phase`,
+    CONTEST_DATES: (id: number) => `${API_BASE_URL}/admin/contests/${id}/dates`,
     PAYMENTS: `${API_BASE_URL}/admin/payments`,
     WINNERS: `${API_BASE_URL}/admin/winners`,
+    REPARTICIPATION: `${API_BASE_URL}/admin/reparticipation-notifications`,
   },
 };
 
 // App Configuration
 export const APP_CONFIG = {
   // Artist Registration Fee (in Kobo for Flutterwave - Nigerian currency smallest unit)
-  ARTIST_REGISTRATION_FEE: 25000, // ₦25,000.00 (or equivalent in your currency)
-  ARTIST_REGISTRATION_FEE_DISPLAY: "₦25,000",
+  ARTIST_REGISTRATION_FEE: 15000, // ₦25,000.00 (or equivalent in your currency)
+  ARTIST_REGISTRATION_FEE_DISPLAY: "₦15,000",
   CURRENCY: "NGN",
   CURRENCY_SYMBOL: "₦",
   
@@ -130,6 +153,7 @@ export const APP_CONFIG = {
   
   // File Upload Limits
   MAX_SONG_SIZE_MB: 15,
+  MAX_COVER_SIZE_MB: 5,
   ALLOWED_AUDIO_TYPES: ["audio/mpeg", "audio/mp3"],
   
   // Pagination

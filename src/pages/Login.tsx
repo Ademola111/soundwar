@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
-import { sanitizeInput, VALIDATION_PATTERNS } from "@/config/api";
+import { API_ENDPOINTS, sanitizeInput, VALIDATION_PATTERNS } from "@/config/api";
 
 const Login = () => {
   const [formData, setFormData] = useState({
@@ -17,10 +17,28 @@ const Login = () => {
     password: "",
   });
   const [isLoading, setIsLoading] = useState(false);
+  const [isResendingActivation, setIsResendingActivation] = useState(false);
   const [error, setError] = useState("");
   const navigate = useNavigate();
   const { login } = useAuth();
   const { toast } = useToast();
+
+  const resendActivation = async () => {
+    setIsResendingActivation(true);
+    try {
+      await fetch(API_ENDPOINTS.AUTH.RESEND_ACTIVATION, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: sanitizeInput(formData.email.trim().toLowerCase()) }),
+      });
+      toast({
+        title: "Activation Email Requested",
+        description: "If the account is not active, a new activation link has been sent.",
+      });
+    } finally {
+      setIsResendingActivation(false);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -36,12 +54,21 @@ const Login = () => {
     setIsLoading(true);
     
     try {
-      await login(sanitizedEmail, formData.password);
+      const data = await login(sanitizedEmail, formData.password);
       toast({
         title: "Welcome back!",
         description: "You have successfully logged in.",
       });
-      navigate("/");
+
+      if (data?.user?.artist_profile && !data.user.artist_profile.is_paid) {
+        toast({
+          title: "Artist registration pending",
+          description: "Complete payment before uploading your track.",
+        });
+        navigate("/payment");
+      } else {
+        navigate("/");
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Login failed. Please try again.");
     } finally {
@@ -116,7 +143,20 @@ const Login = () => {
               </div>
 
               {error && (
-                <p className="text-sm text-destructive text-center">{error}</p>
+                <div className="space-y-2 text-center">
+                  <p className="text-sm text-destructive">{error}</p>
+                  {error.toLowerCase().includes("activate") && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={resendActivation}
+                      disabled={isResendingActivation}
+                    >
+                      {isResendingActivation ? "Sending..." : "Resend activation email"}
+                    </Button>
+                  )}
+                </div>
               )}
 
               <Button 
@@ -135,6 +175,12 @@ const Login = () => {
                   Sign up
                 </Link>
               </p>
+              {/* <p className="text-center text-sm text-muted-foreground">
+                Administrator?{" "}
+                <Link to="/admin/login" className="text-primary hover:underline">
+                  Admin sign in
+                </Link>
+              </p> */}
             </form>
           </motion.div>
         </div>

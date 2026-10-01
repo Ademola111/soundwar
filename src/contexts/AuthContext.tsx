@@ -1,22 +1,37 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from "react";
 import { API_ENDPOINTS, getAuthHeaders } from "@/config/api";
 
-export type UserRole = "user" | "artist" | "admin";
+export type UserRole = "user" | "voter" | "artist" | "admin";
 
 export interface User {
   id: string;
   email: string;
+  name?: string;
   username: string;
+  profile_image?: string | null;
   roles: UserRole[];
   artist_profile?: {
     id: string;
     stage_name: string;
     bio: string;
     avatar_url: string;
-    total_votes: number;
-    total_earnings: number;
+    profile_image?: string | null;
+    genre?: string;
+    is_paid?: boolean;
+    is_verified?: boolean;
+    can_participate?: boolean;
+    months_until_eligible?: number;
+    total_votes?: number;
+    total_earnings?: number;
   };
   created_at: string;
+}
+
+interface AuthResponse {
+  token: string;
+  refresh_token: string;
+  user: User;
+  requires_payment?: boolean;
 }
 
 interface AuthContextType {
@@ -25,7 +40,8 @@ interface AuthContextType {
   isLoading: boolean;
   isAuthenticated: boolean;
   hasRole: (role: UserRole) => boolean;
-  login: (email: string, password: string) => Promise<void>;
+  login: (email: string, password: string) => Promise<AuthResponse>;
+  adminLogin: (email: string, password: string) => Promise<AuthResponse>;
   logout: () => void;
   refreshUser: () => Promise<void>;
 }
@@ -100,6 +116,25 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     setToken(data.token);
     setUser(data.user);
     localStorage.setItem("auth_token", data.token);
+    return data;
+  };
+
+  const adminLogin = async (email: string, password: string) => {
+    const response = await fetch(API_ENDPOINTS.AUTH.ADMIN_LOGIN, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password }),
+    });
+
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.error || data.message || "Admin login failed");
+    }
+
+    setToken(data.token);
+    setUser(data.user);
+    localStorage.setItem("auth_token", data.token);
+    return data;
   };
 
   const logout = () => {
@@ -121,6 +156,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         isAuthenticated,
         hasRole,
         login,
+        adminLogin,
         logout,
         refreshUser,
       }}

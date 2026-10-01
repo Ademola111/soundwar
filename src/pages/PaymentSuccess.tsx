@@ -5,16 +5,25 @@ import { Check, Music2, Loader2, AlertTriangle, Shield } from "lucide-react";
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
 import { Button } from "@/components/ui/button";
-import { API_ENDPOINTS, isValidTransactionRef } from "@/config/api";
+import { useAuth } from "@/contexts/AuthContext";
+import { useNavigate } from "react-router-dom";
+import { API_ENDPOINTS, getAuthHeaders, isValidTransactionRef } from "@/config/api";
 
 const PaymentSuccess = () => {
   const [searchParams] = useSearchParams();
   const [status, setStatus] = useState<"loading" | "success" | "error">("loading");
+  const { refreshUser } = useAuth();
+  const navigate = useNavigate();
   
   // Flutterwave returns these params
   const transactionId = searchParams.get("transaction_id");
   const txRef = searchParams.get("tx_ref");
   const flwStatus = searchParams.get("status");
+
+  const handleContinueToUpload = async () => {
+    await refreshUser();
+    navigate("/submit");
+  };
 
   useEffect(() => {
     const verifyPayment = async () => {
@@ -37,33 +46,32 @@ const PaymentSuccess = () => {
 
       try {
         // Verify payment with backend (server-side verification is critical for security)
-        const verifyId = transactionId || searchParams.get("session_id") || "";
+        const authToken = localStorage.getItem('auth_token');
+        if (!authToken) {
+          setStatus("error");
+          return;
+        }
+
         const response = await fetch(API_ENDPOINTS.PAYMENTS.VERIFY, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: getAuthHeaders(authToken),
           body: JSON.stringify({ 
             transaction_id: transactionId,
             tx_ref: txRef,
-            status: flwStatus,
           }),
         });
         
         const data = await response.json();
         
-        if (data.status === "success" || data.status === "completed") {
+        if (response.ok) {
           setStatus("success");
         } else {
+          console.error("Payment verification failed", data);
           setStatus("error");
         }
       } catch (error) {
         console.log("Payment verification - will connect to backend");
-        // For demo: assume success if Flutterwave returned success status
-        if (flwStatus === "successful" || flwStatus === "completed") {
-          setStatus("success");
-        } else {
-          // Default to success for demo
-          setStatus("success");
-        }
+        setStatus("error");
       }
     };
 
@@ -125,12 +133,10 @@ const PaymentSuccess = () => {
                 )}
 
                 <div className="space-y-3">
-                  <Link to="/submit">
-                    <Button variant="hero" size="lg" className="w-full">
-                      <Music2 className="w-4 h-4 mr-2" />
-                      Upload Your Track
-                    </Button>
-                  </Link>
+                  <Button variant="hero" size="lg" className="w-full" onClick={handleContinueToUpload}>
+                    <Music2 className="w-4 h-4 mr-2" />
+                    Upload Your Track
+                  </Button>
                   
                   <Link to="/">
                     <Button variant="glass" size="lg" className="w-full">
@@ -162,7 +168,7 @@ const PaymentSuccess = () => {
                 )}
 
                 <div className="space-y-3">
-                  <Link to="/register">
+                  <Link to="/payment">
                     <Button variant="hero" size="lg" className="w-full">
                       Try Again
                     </Button>

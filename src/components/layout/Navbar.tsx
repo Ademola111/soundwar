@@ -1,19 +1,36 @@
 import { useState } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Music2, Menu, X, Trophy, User, Upload, LayoutDashboard } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useAuth } from "@/contexts/AuthContext";
+import { useVoting } from "@/hooks/useVoting";
+import { useSubmitEligibility } from "@/hooks/useSubmitEligibility";
 
 const navItems = [
   { name: "Home", path: "/" },
   { name: "Leaderboard", path: "/leaderboard", icon: Trophy },
   { name: "Artists", path: "/artists", icon: User },
-  { name: "Submit Song", path: "/submit", icon: Upload },
 ];
 
 export const Navbar = () => {
   const [isOpen, setIsOpen] = useState(false);
   const location = useLocation();
+  const navigate = useNavigate();
+  const { isAuthenticated, logout } = useAuth();
+  const { voteInfo, isLoading: isVoteStatusLoading } = useVoting();
+  const { canSubmitSong } = useSubmitEligibility();
+  const visibleNavItems = [
+    ...navItems,
+    ...(canSubmitSong ? [{ name: "Submit Song", path: "/submit", icon: Upload }] : []),
+    ...(isAuthenticated ? [{ name: "My Profile", path: "/profile", icon: LayoutDashboard }] : []),
+  ];
+
+  const handleLogout = () => {
+    logout();
+    setIsOpen(false);
+    navigate("/");
+  };
 
   return (
     <motion.nav
@@ -35,7 +52,7 @@ export const Navbar = () => {
 
           {/* Desktop Nav */}
           <div className="hidden md:flex items-center gap-1">
-            {navItems.map((item) => (
+            {visibleNavItems.map((item) => (
               <Link
                 key={item.path}
                 to={item.path}
@@ -52,16 +69,30 @@ export const Navbar = () => {
 
           {/* Auth Buttons */}
           <div className="hidden md:flex items-center gap-3">
-            <Link to="/login">
-              <Button variant="ghost" size="sm">
-                Sign In
+            {isAuthenticated ? (
+              <Button variant="ghost" size="sm" onClick={handleLogout}>
+                Log Out
               </Button>
-            </Link>
-            <Link to="/register">
-              <Button variant="hero" size="sm">
-                Join Contest
-              </Button>
-            </Link>
+            ) : (
+              <Link to="/login">
+                <Button variant="ghost" size="sm">
+                  Sign In
+                </Button>
+              </Link>
+            )}
+            {isAuthenticated ? (
+              voteInfo.hasVoted ? (
+                <Button variant="hero" size="sm" disabled>Voted</Button>
+              ) : (
+                <Link to="/leaderboard">
+                  <Button variant="hero" size="sm" disabled={isVoteStatusLoading}>Vote Now</Button>
+                </Link>
+              )
+            ) : (
+              <Link to="/register">
+                <Button variant="hero" size="sm">Join Contest</Button>
+              </Link>
+            )}
           </div>
 
           {/* Mobile Menu Button */}
@@ -83,7 +114,7 @@ export const Navbar = () => {
           className="md:hidden glass border-t border-border"
         >
           <div className="container mx-auto px-4 py-4 flex flex-col gap-2">
-            {navItems.map((item) => (
+            {visibleNavItems.map((item) => (
               <Link
                 key={item.path}
                 to={item.path}
@@ -98,16 +129,30 @@ export const Navbar = () => {
               </Link>
             ))}
             <div className="flex gap-2 mt-4 pt-4 border-t border-border">
-              <Link to="/login" className="flex-1">
-                <Button variant="ghost" className="w-full">
-                  Sign In
+              {isAuthenticated ? (
+                <Button variant="ghost" className="flex-1" onClick={handleLogout}>
+                  Log Out
                 </Button>
-              </Link>
-              <Link to="/register" className="flex-1">
-                <Button variant="hero" className="w-full">
-                  Join Contest
-                </Button>
-              </Link>
+              ) : (
+                <Link to="/login" className="flex-1" onClick={() => setIsOpen(false)}>
+                  <Button variant="ghost" className="w-full">
+                    Sign In
+                  </Button>
+                </Link>
+              )}
+              {isAuthenticated ? (
+                voteInfo.hasVoted ? (
+                  <Button variant="hero" className="flex-1" disabled>Voted</Button>
+                ) : (
+                  <Link to="/leaderboard" className="flex-1" onClick={() => setIsOpen(false)}>
+                    <Button variant="hero" className="w-full" disabled={isVoteStatusLoading}>Vote Now</Button>
+                  </Link>
+                )
+              ) : (
+                <Link to="/register" className="flex-1" onClick={() => setIsOpen(false)}>
+                  <Button variant="hero" className="w-full">Join Contest</Button>
+                </Link>
+              )}
             </div>
           </div>
         </motion.div>

@@ -6,8 +6,8 @@ from .user import User
 from .artist import Artist
 from .song import Song
 from .vote import Vote
-from .contest import Contest, ContestWinner
+from .contest import Contest, ContestEntry, ContestWinner, ArtistContestEntry
 from .payment import Payment
 from .tokenblocklist import TokenBlocklist
 
-__all__ = ['db', 'User', 'Artist', 'Song', 'Vote', 'Contest', 'ContestWinner', 'Payment', 'TokenBlocklist']
+__all__ = ['db', 'User', 'Artist', 'Song', 'Vote', 'Contest', 'ContestEntry', 'ArtistContestEntry', 'ContestWinner', 'Payment', 'TokenBlocklist']

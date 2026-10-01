@@ -15,6 +15,7 @@ class Contest(db.Model):
     
     # Contest phases
     phase = db.Column(db.String(20), default='submission')  # submission, voting, completed
+    phase_override = db.Column(db.Boolean, default=False, nullable=False)
     
     # Dates
     start_date = db.Column(db.DateTime, nullable=False)
@@ -39,7 +40,10 @@ class Contest(db.Model):
         return cls.query.filter_by(is_active=True).first()
     
     def get_phase(self):
-        """Determine current contest phase based on dates"""
+        """Return an admin-set phase, or derive it from dates when not overridden."""
+        if self.phase_override:
+            return self.phase
+
         now = datetime.now()
         
         if now < self.start_date:
@@ -64,6 +68,44 @@ class Contest(db.Model):
             'is_active': self.is_active,
             'created_at': self.created_at.isoformat() if self.created_at else None
         }
+
+
+class ContestEntry(db.Model):
+    """Represents an artist's registration and payment for a single contest season."""
+    __tablename__ = 'contest_entries'
+
+    id = db.Column(db.Integer, primary_key=True)
+    artist_id = db.Column(db.Integer, db.ForeignKey('artists.id'), nullable=False)
+    contest_id = db.Column(db.Integer, db.ForeignKey('contests.id'), nullable=False)
+
+    status = db.Column(db.String(30), default='pending_payment')
+    is_paid = db.Column(db.Boolean, default=False)
+    is_verified = db.Column(db.Boolean, default=False)
+
+    created_at = db.Column(db.DateTime, default=datetime.now)
+    updated_at = db.Column(db.DateTime, default=datetime.now, onupdate=datetime.now)
+
+    __table_args__ = (
+        db.UniqueConstraint('artist_id', 'contest_id', name='uq_artist_contest_entry'),
+    )
+
+    artist = db.relationship('Artist', backref='contest_entries')
+    contest = db.relationship('Contest', backref='contest_entries')
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'artist_id': self.artist_id,
+            'contest_id': self.contest_id,
+            'status': self.status,
+            'is_paid': self.is_paid,
+            'is_verified': self.is_verified,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+
+ArtistContestEntry = ContestEntry
 
 
 class ContestWinner(db.Model):

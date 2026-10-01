@@ -15,4 +15,4 @@ if __name__ == "__main__":
     if 'test' in sys.argv:
         run_tests()
     else:
-        app.run(debug=True, port=8080)
+        app.run(debug=True, port=5000)

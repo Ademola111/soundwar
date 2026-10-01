@@ -12,11 +12,14 @@ import Register from "./pages/Register";
 import Login from "./pages/Login";
 import ForgotPassword from "./pages/ForgotPassword";
 import ResetPassword from "./pages/ResetPassword";
+import ActivateAccount from "./pages/ActivateAccount";
 import Submit from "./pages/Submit";
 import PaymentSuccess from "./pages/PaymentSuccess";
 import PaymentCancel from "./pages/PaymentCancel";
-import Profile from "./pages/Profile";
+import Payment from "./pages/Payment";
+import AccountProfile from "./pages/AccountProfile";
 import Admin from "./pages/Admin";
+import AdminAccess from "./pages/AdminAccess";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -37,10 +40,14 @@ const App = () => (
               <Route path="/login" element={<Login />} />
               <Route path="/forgot-password" element={<ForgotPassword />} />
               <Route path="/reset-password" element={<ResetPassword />} />
+              <Route path="/activate-account" element={<ActivateAccount />} />
               <Route path="/submit" element={<Submit />} />
+              <Route path="/payment" element={<Payment />} />
               <Route path="/payment/success" element={<PaymentSuccess />} />
               <Route path="/payment/cancel" element={<PaymentCancel />} />
-              <Route path="/profile" element={<Profile />} />
+              <Route path="/profile" element={<AccountProfile />} />
+              <Route path="/admin/login" element={<AdminAccess />} />
+              <Route path="/admin/register" element={<AdminAccess />} />
               <Route path="/admin" element={<Admin />} />
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
               <Route path="*" element={<NotFound />} />

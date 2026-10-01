@@ -2,7 +2,6 @@
 Leaderboard Routes
 """
 from flask import Blueprint, jsonify
-
 from ..models import Song, Contest
 
 leaderboard_bp = Blueprint('leaderboard', __name__, url_prefix='/api/leaderboard')

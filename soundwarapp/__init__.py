@@ -1,26 +1,26 @@
 #first open init beside the template folder which is the top root init.
 # after the init inside the template next is config.py not in instance
-from flask import Flask
-from flask_wtf.csrf import CSRFProtect
-from flask_sqlalchemy import SQLAlchemy
-from flask_migrate import Migrate
-from flask_mail import Mail
+import flask
+import flask_wtf.csrf
+import flask_sqlalchemy
+import flask_migrate
+import flask_mail
 from soundwarapp.utils.email import mail
-from flask_jwt_extended import JWTManager
-from flask_limiter import Limiter
-from flask_limiter.util import get_remote_address
-from flask_cors import CORS
+import flask_jwt_extended
+import flask_limiter
+import flask_limiter.util
+import flask_cors
 from soundwarapp import config
 
-db = SQLAlchemy()
-migrate = Migrate()
-mail = Mail()
-jwt = JWTManager()
-csrf = CSRFProtect()
-limiter = Limiter(get_remote_address, default_limits=["200 per day", "50 per hour"])
+db = flask_sqlalchemy.SQLAlchemy()
+migrate = flask_migrate.Migrate()
+mail = flask_mail.Mail()
+jwt = flask_jwt_extended.JWTManager()
+csrf = flask_wtf.csrf.CSRFProtect()
+limiter = flask_limiter.Limiter(flask_limiter.util.get_remote_address, default_limits=["200 per day", "50 per hour"])
 
 def create_app(config_name="production", *args, **kwargs):
-    app = Flask(__name__, instance_relative_config=True)
+    app = flask.Flask(__name__, instance_relative_config=True)
 
     if config_name == "testing":
         app.config.from_object(config.TestingConfig)
@@ -45,10 +45,23 @@ def create_app(config_name="production", *args, **kwargs):
     csrf.init_app(app)
     limiter.init_app(app)
 
-    CORS(
+    cors_origins = app.config.get("CORS_ORIGINS", [])
+    if isinstance(cors_origins, str):
+        cors_origins = [cors_origins]
+
+    frontend_url = app.config.get("FRONTEND_URL")
+    if frontend_url:
+        cors_origins.append(frontend_url)
+
+    default_origins = [
+        "http://localhost:8080",
+        "http://127.0.0.1:8080",
+    ]
+    allowed_origins = list(dict.fromkeys([origin for origin in [*cors_origins, *default_origins] if origin]))
+
+    flask_cors.CORS(
         app,
-        # resources={r"/api/*": {"origins": ["http://localhost:5173", "http://127.0.0.1:5173"]}},
-        origins=[app.config['FRONTEND_URL'],'http://localhost:5173', 'http://localhost:3000'], 
+        resources={r"/api/*": {"origins": allowed_origins}},
         supports_credentials=True,
         allow_headers=["Content-Type", "Authorization", "X-Requested-With", "Accept"],
         methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"]
@@ -74,11 +87,19 @@ def create_app(config_name="production", *args, **kwargs):
    
 
     #load blacklist model for jwt token revocation
-    from soundwarapp import utils
+    from soundwarapp.utils import blacklist
+    
+    #load the reparticipation scheduler
+    from soundwarapp.utils.reparticipation import start_reparticipation_scheduler
 
     # load models
-    from soundwarapp import models
+    from soundwarapp.models import User, Artist, Song, Vote, Contest, ContestWinner, Payment, TokenBlocklist
 
-    from soundwarapp import myroutes
+    from soundwarapp.myroutes import admin, artists, auth, leaderboard, payments, songs, votes
+
+    # Start the background notification scheduler for past winners.
+    # start_reparticipation_scheduler(app)
     
+    __all__ = ["db", "migrate", "mail", "jwt", "csrf", "limiter", "create_app"]
+
     return app

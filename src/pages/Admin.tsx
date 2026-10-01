@@ -4,7 +4,6 @@ import { motion } from "framer-motion";
 import {
   Users,
   Music,
-  DollarSign,
   TrendingUp,
   CheckCircle,
   XCircle,
@@ -19,7 +18,11 @@ import {
   Filter,
   Download,
   RefreshCw,
+  Loader2,
+  AlertTriangle,
+  CalendarClock,
 } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -51,110 +54,302 @@ import {
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Navbar } from "@/components/layout/Navbar";
-import { API_ENDPOINTS, getAuthHeaders } from "@/config/api";
+import { API_ENDPOINTS, APP_CONFIG, getAuthHeaders } from "@/config/api";
+import { useAuth } from "@/contexts/AuthContext";
 
-// Mock data for demo
-const mockDashboardStats = {
-  total_users: 1542,
-  total_artists: 287,
-  total_songs: 423,
-  pending_songs: 12,
-  total_votes: 45678,
-  total_revenue: 7175,
-  active_contest: {
-    name: "Q1 2024 Music Competition",
-    phase: "voting",
-    days_remaining: 18,
-    progress: 65,
-  },
+interface PendingSong {
+  id: number;
+  title: string;
+  audio_url: string;
+  cover_image: string | null;
+  duration: number | null;
+  vote_count: number;
+  status: string;
+  created_at: string | null;
+  artist?: {
+    id: number;
+    stage_name: string;
+    profile_image: string | null;
+  } | null;
+}
+
+interface AdminUser {
+  id: number;
+  name: string;
+  username: string;
+  email: string;
+  roles: string[];
+  status: string;
+  songs_count: number;
+  votes_received: number;
+  votes_cast: number;
+  created_at: string | null;
+}
+
+interface DashboardStats {
+  total_users: number;
+  total_artists: number;
+  total_songs: number;
+  pending_songs: number;
+  total_votes: number;
+  total_revenue: number;
+}
+
+interface DashboardData {
+  stats: DashboardStats;
+  current_contest: {
+    id: number;
+    title: string;
+    phase: string;
+    start_date: string;
+    submission_end_date: string;
+    voting_end_date: string;
+  } | null;
+  recent_activity: Array<{
+    timestamp: string | null;
+    type: "user" | "song" | "payment";
+    title: string;
+    detail: string;
+  }>;
+}
+
+interface AnalyticsData {
+  daily_votes: Array<{ date: string; label: string; votes: number }>;
+  top_songs: Array<{ title: string; artist: string; votes: number }>;
+  registration_trend: {
+    artists_this_week: number;
+    artists_last_week: number;
+    users_this_week: number;
+    users_last_week: number;
+  };
+  contest_revenue: number;
+  contest_title: string | null;
+}
+
+const getMediaUrl = (url: string | null | undefined) => {
+  if (!url) return null;
+  return new URL(url, new URL(API_ENDPOINTS.SONGS.BASE).origin).toString();
 };
 
-const mockPendingSongs = [
-  {
-    id: "p1",
-    title: "Neon Lights",
-    artist_name: "Synthwave Master",
-    artist_email: "synth@example.com",
-    submitted_at: "2024-03-18T10:30:00",
-    file_url: "#",
-    duration: "3:45",
-  },
-  {
-    id: "p2",
-    title: "Mountain Echo",
-    artist_name: "Nature Sounds",
-    artist_email: "nature@example.com",
-    submitted_at: "2024-03-17T15:20:00",
-    file_url: "#",
-    duration: "4:12",
-  },
-  {
-    id: "p3",
-    title: "Urban Beat",
-    artist_name: "City Producer",
-    artist_email: "city@example.com",
-    submitted_at: "2024-03-17T09:45:00",
-    file_url: "#",
-    duration: "3:28",
-  },
-];
+const formatNaira = (amount: number) =>
+  `${APP_CONFIG.CURRENCY_SYMBOL}${amount.toLocaleString("en-NG", { maximumFractionDigits: 2 })}`;
 
-const mockUsers = [
-  { id: "u1", username: "musicfan123", email: "fan@example.com", role: "user", status: "active", votes_cast: 15, joined: "2024-01-10" },
-  { id: "u2", username: "starproducer", email: "star@example.com", role: "artist", status: "active", songs: 5, votes_received: 342, joined: "2024-01-05" },
-  { id: "u3", username: "beatmaker", email: "beat@example.com", role: "artist", status: "pending_payment", songs: 0, votes_received: 0, joined: "2024-03-15" },
-  { id: "u4", username: "listener99", email: "listen@example.com", role: "user", status: "suspended", votes_cast: 3, joined: "2024-02-20" },
-];
+const formatDuration = (duration: number | null) => {
+  if (duration === null) return "Duration unavailable";
+  const minutes = Math.floor(duration / 60);
+  const seconds = duration % 60;
+  return `${minutes}:${String(seconds).padStart(2, "0")}`;
+};
 
-const mockContestAnalytics = {
-  daily_votes: [
-    { date: "Mar 12", votes: 234 },
-    { date: "Mar 13", votes: 312 },
-    { date: "Mar 14", votes: 287 },
-    { date: "Mar 15", votes: 445 },
-    { date: "Mar 16", votes: 398 },
-    { date: "Mar 17", votes: 521 },
-    { date: "Mar 18", votes: 367 },
-  ],
-  top_songs: [
-    { title: "Summer Vibes", artist: "Star Producer", votes: 342 },
-    { title: "Midnight Dreams", artist: "Luna Echo", votes: 298 },
-    { title: "Electric Soul", artist: "Neon Pulse", votes: 276 },
-  ],
-  registration_trend: {
-    artists_this_week: 12,
-    artists_last_week: 8,
-    users_this_week: 45,
-    users_last_week: 38,
-  },
+const toDateTimeLocal = (value: string) => {
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return "";
+  return new Date(date.getTime() - date.getTimezoneOffset() * 60_000)
+    .toISOString()
+    .slice(0, 16);
 };
 
 const Admin = () => {
   const navigate = useNavigate();
-  const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("overview");
-  const [pendingSongs, setPendingSongs] = useState(mockPendingSongs);
-  const [selectedSong, setSelectedSong] = useState<typeof mockPendingSongs[0] | null>(null);
+  const [dashboard, setDashboard] = useState<DashboardData | null>(null);
+  const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
+  const [users, setUsers] = useState<AdminUser[]>([]);
+  const [isLoadingData, setIsLoadingData] = useState(true);
+  const [dataError, setDataError] = useState("");
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [pendingSongs, setPendingSongs] = useState<PendingSong[]>([]);
+  const [isLoadingPendingSongs, setIsLoadingPendingSongs] = useState(true);
+  const [pendingSongsError, setPendingSongsError] = useState("");
+  const [pendingSongsRefreshKey, setPendingSongsRefreshKey] = useState(0);
+  const [selectedSong, setSelectedSong] = useState<PendingSong | null>(null);
   const [actionType, setActionType] = useState<"approve" | "reject" | null>(null);
   const [rejectionReason, setRejectionReason] = useState("");
+  const [isSongActionLoading, setIsSongActionLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [userFilter, setUserFilter] = useState("all");
+  const [isTriggeringReminder, setIsTriggeringReminder] = useState(false);
+  const [isUpdatingContestPhase, setIsUpdatingContestPhase] = useState(false);
+  const [isEditingSeasonDates, setIsEditingSeasonDates] = useState(false);
+  const [isSavingSeasonDates, setIsSavingSeasonDates] = useState(false);
+  const [seasonDateForm, setSeasonDateForm] = useState({
+    start_date: "",
+    submission_end_date: "",
+    voting_end_date: "",
+  });
+  const { toast } = useToast();
+  const { token, user, isLoading: isAuthLoading } = useAuth();
+  const isAdmin = Boolean(user?.roles?.includes("admin"));
 
   useEffect(() => {
-    // Simulate loading
-    const timer = setTimeout(() => setIsLoading(false), 500);
-    return () => clearTimeout(timer);
-  }, []);
+    if (!token || !isAdmin) return;
+    const controller = new AbortController();
+
+    const loadAdminData = async () => {
+      setIsLoadingData(true);
+      setDataError("");
+      const fetchData = async <T,>(url: string) => {
+        try {
+          const response = await fetch(url, {
+            headers: getAuthHeaders(token),
+            signal: controller.signal,
+          });
+          const data = await response.json().catch(() => ({}));
+          if (!response.ok) {
+            throw new Error(data.error || `Request failed (${response.status}).`);
+          }
+          return { data: data as T, error: "" };
+        } catch (error) {
+          return {
+            data: null,
+            error: error instanceof Error ? error.message : "Request failed.",
+          };
+        }
+      };
+
+      const [dashboardResult, usersResult, analyticsResult] = await Promise.all([
+        fetchData<DashboardData>(API_ENDPOINTS.ADMIN.DASHBOARD),
+        fetchData<{ users: AdminUser[] }>(API_ENDPOINTS.ADMIN.USERS),
+        fetchData<AnalyticsData>(API_ENDPOINTS.ADMIN.ANALYTICS),
+      ]);
+
+      if (controller.signal.aborted) return;
+      if (dashboardResult.data) setDashboard(dashboardResult.data);
+      if (usersResult.data) setUsers(usersResult.data.users || []);
+      if (analyticsResult.data) setAnalytics(analyticsResult.data);
+
+      const failures = [
+        dashboardResult.error && `Dashboard: ${dashboardResult.error}`,
+        usersResult.error && `Users: ${usersResult.error}`,
+        analyticsResult.error && `Analytics: ${analyticsResult.error}`,
+      ].filter(Boolean);
+      setDataError(failures.length ? `Some dashboard data could not be loaded. ${failures.join(" ")}` : "");
+      setIsLoadingData(false);
+    };
+
+    void loadAdminData();
+    return () => controller.abort();
+  }, [token, isAdmin, refreshKey]);
+
+  useEffect(() => {
+    if (!isAuthLoading && !isAdmin) {
+      navigate("/admin/login", { replace: true });
+    }
+  }, [isAuthLoading, isAdmin, navigate]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    const loadPendingSongs = async () => {
+      setIsLoadingPendingSongs(true);
+      setPendingSongsError("");
+
+      if (!token) {
+        setPendingSongsError("Sign in with an administrator account to review submissions.");
+        setIsLoadingPendingSongs(false);
+        return;
+      }
+
+      try {
+        const response = await fetch(API_ENDPOINTS.ADMIN.PENDING_SONGS, {
+          headers: getAuthHeaders(token),
+          signal: controller.signal,
+        });
+        const data = await response.json() as { songs?: PendingSong[]; error?: string };
+
+        if (!response.ok) {
+          throw new Error(data.error || "Could not load pending submissions.");
+        }
+
+        setPendingSongs(data.songs || []);
+      } catch (error) {
+        if (!controller.signal.aborted) {
+          setPendingSongsError(error instanceof Error ? error.message : "Could not load pending submissions.");
+        }
+      } finally {
+        if (!controller.signal.aborted) setIsLoadingPendingSongs(false);
+      }
+    };
+
+    void loadPendingSongs();
+    return () => controller.abort();
+  }, [token, pendingSongsRefreshKey]);
 
   const handleSongAction = async (songId: string, action: "approve" | "reject") => {
-    // API call would go here
-    console.log(`${action} song:`, songId, action === "reject" ? rejectionReason : "");
-    
-    // Remove from pending list
-    setPendingSongs((prev) => prev.filter((s) => s.id !== songId));
-    setSelectedSong(null);
-    setActionType(null);
-    setRejectionReason("");
+    if (!token) return;
+
+    setIsSongActionLoading(true);
+    try {
+      const response = await fetch(
+        action === "approve"
+          ? API_ENDPOINTS.ADMIN.APPROVE(songId)
+          : API_ENDPOINTS.ADMIN.REJECT(songId),
+        {
+          method: "POST",
+          headers: getAuthHeaders(token),
+          ...(action === "reject" && { body: JSON.stringify({ reason: rejectionReason.trim() }) }),
+        },
+      );
+      const contentType = response.headers.get("content-type") || "";
+      const data = contentType.includes("application/json")
+        ? await response.json() as { error?: string }
+        : { error: `Server returned ${response.status} without a JSON response.` };
+
+      if (!response.ok) {
+        throw new Error(data.error || `Could not ${action} this song.`);
+      }
+
+      setPendingSongs((currentSongs) => currentSongs.filter((song) => String(song.id) !== songId));
+      setRefreshKey((key) => key + 1);
+      setSelectedSong(null);
+      setActionType(null);
+      setRejectionReason("");
+      toast({
+        title: action === "approve" ? "Song approved" : "Song rejected",
+        description: action === "approve"
+          ? "The track is now approved for the contest."
+          : "The track has been rejected with your feedback.",
+      });
+    } catch (error) {
+      toast({
+        title: `Could not ${action} song`,
+        description: error instanceof Error ? error.message : "Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSongActionLoading(false);
+    }
+  };
+
+  const handleTriggerReparticipation = async () => {
+    setIsTriggeringReminder(true);
+
+    try {
+      const token = localStorage.getItem("auth_token");
+      const response = await fetch(API_ENDPOINTS.ADMIN.REPARTICIPATION, {
+        method: "POST",
+        headers: getAuthHeaders(token || undefined),
+      });
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || data.message || "Failed to trigger notifications.");
+      }
+
+      toast({
+        title: "Winner reminder sent",
+        description: `${data.notifications_sent || 0} past winner(s) notified.`,
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Could not trigger reminder.";
+      toast({
+        title: "Reminder failed",
+        description: message,
+        variant: "destructive",
+      });
+    } finally {
+      setIsTriggeringReminder(false);
+    }
   };
 
   const getStatusBadge = (status: string) => {
@@ -163,6 +358,8 @@ const Admin = () => {
         return <Badge className="bg-green-500/20 text-green-400 border-green-500/30">Active</Badge>;
       case "pending_payment":
         return <Badge className="bg-yellow-500/20 text-yellow-400 border-yellow-500/30">Pending Payment</Badge>;
+      case "not_entered":
+        return <Badge variant="outline">Not entered this season</Badge>;
       case "suspended":
         return <Badge className="bg-destructive/20 text-destructive border-destructive/30">Suspended</Badge>;
       default:
@@ -181,15 +378,143 @@ const Admin = () => {
     }
   };
 
-  const filteredUsers = mockUsers.filter((user) => {
+  const filteredUsers = users.filter((user) => {
+    const roles = user.roles || [];
+    const role = roles.includes("admin") ? "admin" : roles.includes("artist") ? "artist" : "user";
     const matchesSearch =
       user.username.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      user.email.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesFilter = userFilter === "all" || user.role === userFilter || user.status === userFilter;
+      user.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      user.name.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesFilter = userFilter === "all" || role === userFilter || user.status === userFilter;
     return matchesSearch && matchesFilter;
   });
 
-  if (isLoading) {
+  const contest = dashboard?.current_contest;
+  const contestStart = contest ? new Date(contest.start_date).getTime() : 0;
+  const submissionEnd = contest ? new Date(contest.submission_end_date).getTime() : 0;
+  const votingEnd = contest ? new Date(contest.voting_end_date).getTime() : 0;
+  const hasValidContestDates = Boolean(
+    contest &&
+    Number.isFinite(contestStart) &&
+    Number.isFinite(submissionEnd) &&
+    Number.isFinite(votingEnd) &&
+    contestStart < submissionEnd &&
+    submissionEnd < votingEnd,
+  );
+  const phaseDeadline = !hasValidContestDates ? 0 : contest?.phase === "upcoming"
+    ? contestStart
+    : contest?.phase === "submission"
+      ? submissionEnd
+      : contest?.phase === "voting"
+        ? votingEnd
+        : 0;
+  const daysRemaining = phaseDeadline > Date.now()
+    ? Math.ceil((phaseDeadline - Date.now()) / (1000 * 60 * 60 * 24))
+    : 0;
+  const contestProgress = contest && hasValidContestDates
+    ? Math.min(100, Math.max(0, ((Date.now() - contestStart) / (votingEnd - contestStart)) * 100))
+    : 0;
+  const formatContestDate = (value: string | undefined) => {
+    if (!value || !Number.isFinite(new Date(value).getTime())) return "Date unavailable";
+    return new Date(value).toLocaleString(undefined, {
+      dateStyle: "medium",
+      timeStyle: "short",
+    });
+  };
+  const maximumDailyVotes = Math.max(1, ...(analytics?.daily_votes.map((day) => day.votes) || [0]));
+
+  const percentageChange = (current: number, previous: number) => {
+    if (previous === 0) return current === 0 ? "0%" : "New";
+    const change = Math.round(((current - previous) / previous) * 100);
+    return `${change > 0 ? "+" : ""}${change}%`;
+  };
+
+  const advanceContestPhase = async (phase: "voting" | "completed") => {
+    if (!contest || !token) return;
+
+    setIsUpdatingContestPhase(true);
+    try {
+      const response = await fetch(API_ENDPOINTS.ADMIN.CONTEST_PHASE(contest.id), {
+        method: "POST",
+        headers: getAuthHeaders(token),
+        body: JSON.stringify({ phase }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(data.error || "Could not update the contest phase.");
+      }
+
+      toast({
+        title: phase === "voting" ? "Voting is open" : "Season completed",
+        description: `${data.contest.title} is now in the ${phase} phase.`,
+      });
+      setRefreshKey((key) => key + 1);
+    } catch (error) {
+      toast({
+        title: "Could not update contest phase",
+        description: error instanceof Error ? error.message : "Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsUpdatingContestPhase(false);
+    }
+  };
+
+  const openSeasonDateEditor = () => {
+    if (!contest) return;
+    setSeasonDateForm({
+      start_date: toDateTimeLocal(contest.start_date),
+      submission_end_date: toDateTimeLocal(contest.submission_end_date),
+      voting_end_date: toDateTimeLocal(contest.voting_end_date),
+    });
+    setIsEditingSeasonDates(true);
+  };
+
+  const saveSeasonDates = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!contest || !token) return;
+
+    const { start_date, submission_end_date, voting_end_date } = seasonDateForm;
+    if (!start_date || !submission_end_date || !voting_end_date || !(start_date < submission_end_date && submission_end_date < voting_end_date)) {
+      toast({
+        title: "Invalid season schedule",
+        description: "Set the season start before submission closes, and submission close before voting ends.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsSavingSeasonDates(true);
+    try {
+      const response = await fetch(API_ENDPOINTS.ADMIN.CONTEST_DATES(contest.id), {
+        method: "PUT",
+        headers: getAuthHeaders(token),
+        body: JSON.stringify({
+          start_date: `${start_date}:00`,
+          submission_end_date: `${submission_end_date}:00`,
+          voting_end_date: `${voting_end_date}:00`,
+        }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(data.error || "Could not update season dates.");
+      }
+
+      toast({ title: "Season dates updated", description: `${data.contest.title} schedule has been saved.` });
+      setIsEditingSeasonDates(false);
+      setRefreshKey((key) => key + 1);
+    } catch (error) {
+      toast({
+        title: "Could not update season dates",
+        description: error instanceof Error ? error.message : "Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSavingSeasonDates(false);
+    }
+  };
+
+  if (isAuthLoading || !isAdmin) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="animate-pulse text-primary">Loading Dashboard...</div>
@@ -208,21 +533,40 @@ const Admin = () => {
           animate={{ opacity: 1, y: 0 }}
           className="mb-8"
         >
-          <div className="flex items-center justify-between mb-6">
-            <div>
-              <h1 className="text-3xl font-bold flex items-center gap-3">
-                <Shield className="h-8 w-8 text-primary" />
-                Admin Dashboard
-              </h1>
-              <p className="text-muted-foreground mt-1">
-                Manage contests, approve submissions, and monitor platform activity
-              </p>
-            </div>
-            <Button variant="outline" onClick={() => window.location.reload()}>
-              <RefreshCw className="h-4 w-4 mr-2" />
-              Refresh Data
-            </Button>
+<div className="flex flex-col gap-3 md:flex-row items-start md:items-center justify-between mb-6">
+              <div>
+                <h1 className="text-3xl font-bold flex items-center gap-3">
+                  <Shield className="h-8 w-8 text-primary" />
+                  Admin Dashboard
+                </h1>
+                <p className="text-muted-foreground mt-1">
+                  Manage contests, approve submissions, and monitor platform activity
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-3">
+                <Button variant="outline" onClick={() => setRefreshKey((key) => key + 1)} disabled={isLoadingData}>
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                  {isLoadingData ? "Refreshing..." : "Refresh Data"}
+                </Button>
+                <Button
+                  variant="secondary"
+                  onClick={handleTriggerReparticipation}
+                  disabled={isTriggeringReminder}
+                >
+                  <Clock className="h-4 w-4 mr-2" />
+                  {isTriggeringReminder ? "Sending reminder..." : "Trigger Winner Reminder"}
+                </Button>
+              </div>
           </div>
+
+          {dataError && (
+            <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3" role="alert">
+              <p className="text-sm text-destructive">{dataError}</p>
+              <Button variant="outline" size="sm" onClick={() => setRefreshKey((key) => key + 1)}>
+                <RefreshCw className="h-4 w-4 mr-2" />Retry
+              </Button>
+            </div>
+          )}
 
           {/* Quick Stats */}
           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
@@ -231,8 +575,8 @@ const Admin = () => {
                 <div className="flex items-center gap-3">
                   <Users className="h-5 w-5 text-primary" />
                   <div>
-                    <p className="text-2xl font-bold">{mockDashboardStats.total_users.toLocaleString()}</p>
-                    <p className="text-xs text-muted-foreground">Users</p>
+                    <p className="text-2xl font-bold">{dashboard?.stats.total_users.toLocaleString() ?? "—"}</p>
+                    <p className="text-xs text-muted-foreground">All Users</p>
                   </div>
                 </div>
               </CardContent>
@@ -242,8 +586,8 @@ const Admin = () => {
                 <div className="flex items-center gap-3">
                   <Music className="h-5 w-5 text-accent" />
                   <div>
-                    <p className="text-2xl font-bold">{mockDashboardStats.total_artists}</p>
-                    <p className="text-xs text-muted-foreground">Artists</p>
+                    <p className="text-2xl font-bold">{dashboard?.stats.total_artists.toLocaleString() ?? "—"}</p>
+                    <p className="text-xs text-muted-foreground">Artists this season</p>
                   </div>
                 </div>
               </CardContent>
@@ -253,8 +597,8 @@ const Admin = () => {
                 <div className="flex items-center gap-3">
                   <Play className="h-5 w-5 text-green-400" />
                   <div>
-                    <p className="text-2xl font-bold">{mockDashboardStats.total_songs}</p>
-                    <p className="text-xs text-muted-foreground">Songs</p>
+                    <p className="text-2xl font-bold">{dashboard?.stats.total_songs.toLocaleString() ?? "—"}</p>
+                    <p className="text-xs text-muted-foreground">Songs this season</p>
                   </div>
                 </div>
               </CardContent>
@@ -264,8 +608,8 @@ const Admin = () => {
                 <div className="flex items-center gap-3">
                   <Clock className="h-5 w-5 text-yellow-400" />
                   <div>
-                    <p className="text-2xl font-bold">{mockDashboardStats.pending_songs}</p>
-                    <p className="text-xs text-muted-foreground">Pending</p>
+                    <p className="text-2xl font-bold">{dashboard?.stats.pending_songs.toLocaleString() ?? "—"}</p>
+                    <p className="text-xs text-muted-foreground">Pending this season</p>
                   </div>
                 </div>
               </CardContent>
@@ -275,8 +619,8 @@ const Admin = () => {
                 <div className="flex items-center gap-3">
                   <TrendingUp className="h-5 w-5 text-blue-400" />
                   <div>
-                    <p className="text-2xl font-bold">{mockDashboardStats.total_votes.toLocaleString()}</p>
-                    <p className="text-xs text-muted-foreground">Votes</p>
+                    <p className="text-2xl font-bold">{dashboard?.stats.total_votes.toLocaleString() ?? "—"}</p>
+                    <p className="text-xs text-muted-foreground">Votes this season</p>
                   </div>
                 </div>
               </CardContent>
@@ -284,10 +628,10 @@ const Admin = () => {
             <Card className="glass border-border/50">
               <CardContent className="p-4">
                 <div className="flex items-center gap-3">
-                  <DollarSign className="h-5 w-5 text-emerald-400" />
+                  <span className="flex h-5 w-5 items-center justify-center font-semibold text-emerald-400">₦</span>
                   <div>
-                    <p className="text-2xl font-bold">${mockDashboardStats.total_revenue.toLocaleString()}</p>
-                    <p className="text-xs text-muted-foreground">Revenue</p>
+                    <p className="text-2xl font-bold">{dashboard ? formatNaira(dashboard.stats.total_revenue) : "—"}</p>
+                    <p className="text-xs text-muted-foreground">Revenue this season</p>
                   </div>
                 </div>
               </CardContent>
@@ -303,30 +647,76 @@ const Admin = () => {
           className="mb-8"
         >
           <Card className="glass border-primary/30 bg-primary/5">
-            <CardContent className="p-6">
-              <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+            <CardHeader>
+              <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
-                  <h3 className="text-lg font-semibold flex items-center gap-2">
+                  <CardTitle className="flex items-center gap-2">
                     <BarChart3 className="h-5 w-5 text-primary" />
-                    {mockDashboardStats.active_contest.name}
-                  </h3>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    Phase: <span className="text-primary capitalize">{mockDashboardStats.active_contest.phase}</span>
-                    {" • "}{mockDashboardStats.active_contest.days_remaining} days remaining
-                  </p>
+                    {contest?.title || "No active contest season"}
+                  </CardTitle>
+                  {contest && (
+                    <CardDescription className="mt-2">
+                      Active season #{contest.id} · Phase: <span className="capitalize text-primary">{contest.phase}</span>
+                      {phaseDeadline > 0 && <> · {daysRemaining} days remaining</>}
+                    </CardDescription>
+                  )}
                 </div>
-                <div className="flex-1 max-w-md">
-                  <div className="flex justify-between text-sm mb-1">
-                    <span>Contest Progress</span>
-                    <span className="text-primary">{mockDashboardStats.active_contest.progress}%</span>
-                  </div>
-                  <Progress value={mockDashboardStats.active_contest.progress} className="h-2" />
+                <div className="flex flex-wrap items-center gap-2">
+                  {contest && (
+                    <Button variant="outline" onClick={openSeasonDateEditor}>
+                      <CalendarClock className="mr-2 h-4 w-4" />Edit dates
+                    </Button>
+                  )}
+                  {contest && hasValidContestDates && (
+                    <Badge variant="outline">{Math.round(contestProgress)}% complete</Badge>
+                  )}
+                  {contest?.phase === "submission" && (
+                    <Button onClick={() => advanceContestPhase("voting")} disabled={isUpdatingContestPhase}>
+                      {isUpdatingContestPhase ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Play className="mr-2 h-4 w-4" />}
+                      Start voting
+                    </Button>
+                  )}
+                  {contest?.phase === "voting" && (
+                    <Button variant="outline" onClick={() => advanceContestPhase("completed")} disabled={isUpdatingContestPhase}>
+                      {isUpdatingContestPhase ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle className="mr-2 h-4 w-4" />}
+                      Complete season
+                    </Button>
+                  )}
+                  {contest?.phase === "completed" && <Badge variant="secondary">Season completed</Badge>}
                 </div>
-                <Button variant="outline">
-                  <Settings className="h-4 w-4 mr-2" />
-                  Manage Contest
-                </Button>
               </div>
+            </CardHeader>
+            <CardContent className="space-y-5">
+              {contest ? (
+                <>
+                  <div className="grid gap-4 border-y border-border/60 py-4 sm:grid-cols-3">
+                    <div>
+                      <p className="text-xs uppercase text-muted-foreground">Season starts</p>
+                      <p className="mt-1 text-sm font-medium">{formatContestDate(contest.start_date)}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs uppercase text-muted-foreground">Submission closes</p>
+                      <p className="mt-1 text-sm font-medium">{formatContestDate(contest.submission_end_date)}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs uppercase text-muted-foreground">Voting ends</p>
+                      <p className="mt-1 text-sm font-medium">{formatContestDate(contest.voting_end_date)}</p>
+                    </div>
+                  </div>
+                  {!hasValidContestDates ? (
+                    <div className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm" role="alert">
+                      <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
+                      <p className="text-destructive">
+                        This season’s dates are out of order. Set the start date before submission closes, and set submission close before voting ends. Progress and deadline countdown are hidden until corrected.
+                      </p>
+                    </div>
+                  ) : (
+                    <Progress value={contestProgress} className="h-2" aria-label="Contest season progress" />
+                  )}
+                </>
+              ) : (
+                <p className="text-sm text-muted-foreground">Season-specific counts are zero until a contest is activated.</p>
+              )}
             </CardContent>
           </Card>
         </motion.div>
@@ -338,9 +728,9 @@ const Admin = () => {
           transition={{ delay: 0.2 }}
         >
           <Tabs value={activeTab} onValueChange={setActiveTab}>
-            <TabsList className="glass mb-6">
-              <TabsTrigger value="overview">Overview</TabsTrigger>
-              <TabsTrigger value="approvals" className="relative">
+            <TabsList className="glass mb-6 w-full justify-start overflow-x-auto">
+              <TabsTrigger value="overview" className="shrink-0">Overview</TabsTrigger>
+              <TabsTrigger value="approvals" className="relative shrink-0">
                 Song Approvals
                 {pendingSongs.length > 0 && (
                   <span className="absolute -top-1 -right-1 h-5 w-5 rounded-full bg-destructive text-destructive-foreground text-xs flex items-center justify-center">
@@ -348,8 +738,8 @@ const Admin = () => {
                   </span>
                 )}
               </TabsTrigger>
-              <TabsTrigger value="users">User Management</TabsTrigger>
-              <TabsTrigger value="analytics">Contest Analytics</TabsTrigger>
+              <TabsTrigger value="users" className="shrink-0">User Management</TabsTrigger>
+              <TabsTrigger value="analytics" className="shrink-0">Contest Analytics</TabsTrigger>
             </TabsList>
 
             {/* Overview Tab */}
@@ -360,29 +750,25 @@ const Admin = () => {
                     <CardTitle className="text-lg">Recent Activity</CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <div className="space-y-4">
-                      <div className="flex items-center gap-3 p-3 rounded-lg bg-secondary/50">
-                        <div className="h-2 w-2 rounded-full bg-green-400" />
-                        <div className="flex-1">
-                          <p className="text-sm font-medium">New artist registered</p>
-                          <p className="text-xs text-muted-foreground">beatmaker - 5 minutes ago</p>
-                        </div>
+                    {isLoadingData ? (
+                      <p className="py-8 text-center text-sm text-muted-foreground" role="status">Loading activity...</p>
+                    ) : dashboard?.recent_activity.length ? (
+                      <div className="space-y-4">
+                        {dashboard.recent_activity.map((activity, index) => (
+                          <div key={`${activity.type}-${activity.timestamp}-${index}`} className="flex items-center gap-3 p-3 rounded-lg bg-secondary/50">
+                            <div className={`h-2 w-2 rounded-full ${activity.type === "payment" ? "bg-yellow-400" : activity.type === "song" ? "bg-primary" : "bg-green-400"}`} />
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium">{activity.title}</p>
+                              <p className="text-xs text-muted-foreground truncate">
+                                {activity.detail}{activity.timestamp ? ` · ${new Date(activity.timestamp).toLocaleString()}` : ""}
+                              </p>
+                            </div>
+                          </div>
+                        ))}
                       </div>
-                      <div className="flex items-center gap-3 p-3 rounded-lg bg-secondary/50">
-                        <div className="h-2 w-2 rounded-full bg-primary" />
-                        <div className="flex-1">
-                          <p className="text-sm font-medium">Song submitted for approval</p>
-                          <p className="text-xs text-muted-foreground">Neon Lights by Synthwave Master - 10 minutes ago</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-3 p-3 rounded-lg bg-secondary/50">
-                        <div className="h-2 w-2 rounded-full bg-yellow-400" />
-                        <div className="flex-1">
-                          <p className="text-sm font-medium">Payment received</p>
-                          <p className="text-xs text-muted-foreground">$25.00 artist registration - 1 hour ago</p>
-                        </div>
-                      </div>
-                    </div>
+                    ) : (
+                      <p className="py-8 text-center text-sm text-muted-foreground">No activity recorded yet.</p>
+                    )}
                   </CardContent>
                 </Card>
 
@@ -391,8 +777,11 @@ const Admin = () => {
                     <CardTitle className="text-lg">Top Performers</CardTitle>
                   </CardHeader>
                   <CardContent>
+                    {isLoadingData ? (
+                      <p className="py-8 text-center text-sm text-muted-foreground" role="status">Loading performers...</p>
+                    ) : analytics?.top_songs.length ? (
                     <div className="space-y-4">
-                      {mockContestAnalytics.top_songs.map((song, i) => (
+                      {analytics.top_songs.map((song, i) => (
                         <div key={song.title} className="flex items-center gap-3">
                           <div className={`h-8 w-8 rounded-full flex items-center justify-center text-sm font-bold ${
                             i === 0 ? "bg-gradient-gold text-background" :
@@ -409,6 +798,9 @@ const Admin = () => {
                         </div>
                       ))}
                     </div>
+                    ) : (
+                      <p className="py-8 text-center text-sm text-muted-foreground">No approved songs to rank yet.</p>
+                    )}
                   </CardContent>
                 </Card>
               </div>
@@ -418,21 +810,41 @@ const Admin = () => {
             <TabsContent value="approvals">
               <Card className="glass border-border/50">
                 <CardHeader>
-                  <CardTitle>Pending Song Approvals</CardTitle>
-                  <CardDescription>Review and approve song submissions before they appear in the contest</CardDescription>
+                  <CardTitle>Pending Song Approvals · {contest?.title || "No active season"}</CardTitle>
+                  <CardDescription>Review pending submissions for the active contest season.</CardDescription>
                 </CardHeader>
                 <CardContent>
-                  {pendingSongs.length === 0 ? (
+                  {isLoadingPendingSongs ? (
+                    <div className="flex items-center justify-center gap-2 py-12 text-muted-foreground" role="status">
+                      <Loader2 className="h-5 w-5 animate-spin" />
+                      Loading pending submissions...
+                    </div>
+                  ) : pendingSongsError ? (
+                    <div className="text-center py-12" role="alert">
+                      <p className="text-sm text-destructive">{pendingSongsError}</p>
+                      <Button
+                        variant="outline"
+                        className="mt-4"
+                        onClick={() => setPendingSongsRefreshKey((key) => key + 1)}
+                      >
+                        <RefreshCw className="h-4 w-4 mr-2" />
+                        Retry
+                      </Button>
+                    </div>
+                  ) : pendingSongs.length === 0 ? (
                     <div className="text-center py-12 text-muted-foreground">
                       <CheckCircle className="h-12 w-12 mx-auto mb-4 text-green-400" />
-                      <p>All caught up! No pending submissions.</p>
+                      <p className="font-medium text-foreground">All caught up</p>
+                      <p className="text-sm mt-1">There are no pending song submissions to review.</p>
                     </div>
                   ) : (
-                    <Table>
+                    <div className="overflow-x-auto">
+                    <Table className="min-w-[850px]">
                       <TableHeader>
                         <TableRow>
                           <TableHead>Song</TableHead>
                           <TableHead>Artist</TableHead>
+                          <TableHead>Votes</TableHead>
                           <TableHead>Duration</TableHead>
                           <TableHead>Submitted</TableHead>
                           <TableHead className="text-right">Actions</TableHead>
@@ -441,25 +853,53 @@ const Admin = () => {
                       <TableBody>
                         {pendingSongs.map((song) => (
                           <TableRow key={song.id}>
-                            <TableCell>
-                              <div className="font-medium">{song.title}</div>
+                            <TableCell className="min-w-[250px]">
+                              <div className="flex items-center gap-3">
+                                {getMediaUrl(song.cover_image || song.artist?.profile_image) ? (
+                                  <img
+                                    src={getMediaUrl(song.cover_image || song.artist?.profile_image) || undefined}
+                                    alt=""
+                                    className="h-11 w-11 rounded-md object-cover"
+                                  />
+                                ) : (
+                                  <div className="h-11 w-11 rounded-md bg-primary/10 flex items-center justify-center">
+                                    <Music className="h-5 w-5 text-primary" />
+                                  </div>
+                                )}
+                                <div className="min-w-0">
+                                  <p className="font-medium truncate">{song.title}</p>
+                                  <p className="text-xs text-muted-foreground">Submission #{song.id}</p>
+                                </div>
+                              </div>
                             </TableCell>
                             <TableCell>
-                              <div>{song.artist_name}</div>
-                              <div className="text-xs text-muted-foreground">{song.artist_email}</div>
+                              <div className="font-medium">{song.artist?.stage_name || "Unknown artist"}</div>
+                              <div className="text-xs text-muted-foreground">Artist #{song.artist?.id ?? "N/A"}</div>
                             </TableCell>
-                            <TableCell>{song.duration}</TableCell>
+                            <TableCell>
+                              <Badge variant="outline">{song.vote_count.toLocaleString()}</Badge>
+                            </TableCell>
+                            <TableCell>{formatDuration(song.duration)}</TableCell>
                             <TableCell className="text-muted-foreground">
-                              {new Date(song.submitted_at).toLocaleDateString()}
+                              {song.created_at ? new Date(song.created_at).toLocaleString() : "Date unavailable"}
                             </TableCell>
                             <TableCell className="text-right">
                               <div className="flex justify-end gap-2">
-                                <Button size="sm" variant="outline">
-                                  <Play className="h-4 w-4" />
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  aria-label={`Review ${song.title}`}
+                                  onClick={() => {
+                                    setSelectedSong(song);
+                                    setActionType("approve");
+                                  }}
+                                >
+                                  <Eye className="h-4 w-4" />
                                 </Button>
                                 <Button
                                   size="sm"
                                   className="bg-green-600 hover:bg-green-700"
+                                  aria-label={`Approve ${song.title}`}
                                   onClick={() => {
                                     setSelectedSong(song);
                                     setActionType("approve");
@@ -470,6 +910,7 @@ const Admin = () => {
                                 <Button
                                   size="sm"
                                   variant="destructive"
+                                  aria-label={`Reject ${song.title}`}
                                   onClick={() => {
                                     setSelectedSong(song);
                                     setActionType("reject");
@@ -483,6 +924,7 @@ const Admin = () => {
                         ))}
                       </TableBody>
                     </Table>
+                    </div>
                   )}
                 </CardContent>
               </Card>
@@ -495,7 +937,9 @@ const Admin = () => {
                   <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                     <div>
                       <CardTitle>User Management</CardTitle>
-                      <CardDescription>View and manage all platform users</CardDescription>
+                      <CardDescription>
+                        Accounts are platform-wide; activity counts reflect {contest?.title || "the active season"}.
+                      </CardDescription>
                     </div>
                     <div className="flex gap-2">
                       <div className="relative">
@@ -516,8 +960,9 @@ const Admin = () => {
                           <SelectItem value="all">All Users</SelectItem>
                           <SelectItem value="user">Voters Only</SelectItem>
                           <SelectItem value="artist">Artists Only</SelectItem>
+                          <SelectItem value="admin">Admins Only</SelectItem>
                           <SelectItem value="active">Active</SelectItem>
-                          <SelectItem value="suspended">Suspended</SelectItem>
+                          <SelectItem value="pending_payment">Pending Payment</SelectItem>
                         </SelectContent>
                       </Select>
                       <Button variant="outline">
@@ -528,7 +973,8 @@ const Admin = () => {
                   </div>
                 </CardHeader>
                 <CardContent>
-                  <Table>
+                  <div className="overflow-x-auto">
+                  <Table className="min-w-[760px]">
                     <TableHeader>
                       <TableRow>
                         <TableHead>User</TableHead>
@@ -540,22 +986,28 @@ const Admin = () => {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {filteredUsers.map((user) => (
+                      {isLoadingData ? (
+                        <TableRow><TableCell colSpan={6} className="py-10 text-center text-muted-foreground">Loading users...</TableCell></TableRow>
+                      ) : filteredUsers.length === 0 ? (
+                        <TableRow><TableCell colSpan={6} className="py-10 text-center text-muted-foreground">No matching users found.</TableCell></TableRow>
+                      ) : filteredUsers.map((user) => {
+                        const role = user.roles.includes("admin") ? "admin" : user.roles.includes("artist") ? "artist" : "user";
+                        return (
                         <TableRow key={user.id}>
                           <TableCell>
-                            <div className="font-medium">{user.username}</div>
+                            <div className="font-medium">{user.name || user.username}</div>
                             <div className="text-xs text-muted-foreground">{user.email}</div>
                           </TableCell>
-                          <TableCell>{getRoleBadge(user.role)}</TableCell>
+                          <TableCell>{getRoleBadge(role)}</TableCell>
                           <TableCell>{getStatusBadge(user.status)}</TableCell>
                           <TableCell className="text-muted-foreground">
-                            {user.role === "artist" 
-                              ? `${user.songs} songs • ${user.votes_received} votes`
+                            {role === "artist"
+                              ? `${user.songs_count} songs • ${user.votes_received} votes`
                               : `${user.votes_cast} votes cast`
                             }
                           </TableCell>
                           <TableCell className="text-muted-foreground">
-                            {new Date(user.joined).toLocaleDateString()}
+                            {user.created_at ? new Date(user.created_at).toLocaleDateString() : "—"}
                           </TableCell>
                           <TableCell className="text-right">
                             <div className="flex justify-end gap-2">
@@ -568,9 +1020,11 @@ const Admin = () => {
                             </div>
                           </TableCell>
                         </TableRow>
-                      ))}
+                        );
+                      })}
                     </TableBody>
                   </Table>
+                  </div>
                 </CardContent>
               </Card>
             </TabsContent>
@@ -580,60 +1034,78 @@ const Admin = () => {
               <div className="grid md:grid-cols-2 gap-6">
                 <Card className="glass border-border/50">
                   <CardHeader>
-                    <CardTitle>Voting Trends (Last 7 Days)</CardTitle>
+                    <CardTitle>Voting Trends · {analytics?.contest_title || "No active season"}</CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <div className="space-y-3">
-                      {mockContestAnalytics.daily_votes.map((day) => (
-                        <div key={day.date} className="flex items-center gap-3">
-                          <span className="text-sm text-muted-foreground w-16">{day.date}</span>
-                          <div className="flex-1 h-6 bg-secondary/50 rounded-full overflow-hidden">
-                            <div 
-                              className="h-full bg-gradient-primary rounded-full transition-all"
-                              style={{ width: `${(day.votes / 600) * 100}%` }}
-                            />
+                    {isLoadingData ? (
+                      <p className="py-8 text-center text-sm text-muted-foreground" role="status">Loading voting trends...</p>
+                    ) : analytics?.daily_votes.length ? (
+                      <div className="space-y-3">
+                        {analytics.daily_votes.map((day) => (
+                          <div key={day.date} className="flex items-center gap-3">
+                            <span className="text-sm text-muted-foreground w-16">{day.label}</span>
+                            <div className="flex-1 h-6 bg-secondary/50 rounded-full overflow-hidden">
+                              <div
+                                className="h-full bg-gradient-primary rounded-full transition-all"
+                                style={{ width: `${(day.votes / maximumDailyVotes) * 100}%` }}
+                              />
+                            </div>
+                            <span className="text-sm font-medium w-12 text-right">{day.votes.toLocaleString()}</span>
                           </div>
-                          <span className="text-sm font-medium w-12 text-right">{day.votes}</span>
-                        </div>
-                      ))}
-                    </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="py-8 text-center text-sm text-muted-foreground">No vote activity recorded yet.</p>
+                    )}
                   </CardContent>
                 </Card>
 
                 <Card className="glass border-border/50">
                   <CardHeader>
-                    <CardTitle>Registration Growth</CardTitle>
+                    <CardTitle>Registrations · {analytics?.contest_title || "No active season"}</CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="p-4 rounded-lg bg-secondary/50">
-                        <p className="text-sm text-muted-foreground">New Artists This Week</p>
-                        <div className="flex items-end gap-2 mt-2">
-                          <span className="text-3xl font-bold text-accent">
-                            {mockContestAnalytics.registration_trend.artists_this_week}
-                          </span>
-                          <span className="text-sm text-green-400 mb-1">
-                            +{Math.round(((mockContestAnalytics.registration_trend.artists_this_week - mockContestAnalytics.registration_trend.artists_last_week) / mockContestAnalytics.registration_trend.artists_last_week) * 100)}%
-                          </span>
+                    {isLoadingData ? (
+                      <p className="py-8 text-center text-sm text-muted-foreground" role="status">Loading registrations...</p>
+                    ) : analytics ? (
+                      <>
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="p-4 rounded-lg bg-secondary/50">
+                            <p className="text-sm text-muted-foreground">New Artists · 7 days</p>
+                            <div className="flex items-end gap-2 mt-2">
+                              <span className="text-3xl font-bold text-accent">
+                                {analytics.registration_trend.artists_this_week.toLocaleString()}
+                              </span>
+                              <span className={`text-sm mb-1 ${percentageChange(analytics.registration_trend.artists_this_week, analytics.registration_trend.artists_last_week).startsWith("-") ? "text-red-400" : "text-green-400"}`}>
+                                {percentageChange(analytics.registration_trend.artists_this_week, analytics.registration_trend.artists_last_week)}
+                              </span>
+                            </div>
+                            <p className="text-xs text-muted-foreground mt-1">vs previous 7 days</p>
+                          </div>
+                          <div className="p-4 rounded-lg bg-secondary/50">
+                            <p className="text-sm text-muted-foreground">New platform accounts · 7 days</p>
+                            <div className="flex items-end gap-2 mt-2">
+                              <span className="text-3xl font-bold text-primary">
+                                {analytics.registration_trend.users_this_week.toLocaleString()}
+                              </span>
+                              <span className={`text-sm mb-1 ${percentageChange(analytics.registration_trend.users_this_week, analytics.registration_trend.users_last_week).startsWith("-") ? "text-red-400" : "text-green-400"}`}>
+                                {percentageChange(analytics.registration_trend.users_this_week, analytics.registration_trend.users_last_week)}
+                              </span>
+                            </div>
+                            <p className="text-xs text-muted-foreground mt-1">vs previous 7 days</p>
+                          </div>
                         </div>
-                      </div>
-                      <div className="p-4 rounded-lg bg-secondary/50">
-                        <p className="text-sm text-muted-foreground">New Voters This Week</p>
-                        <div className="flex items-end gap-2 mt-2">
-                          <span className="text-3xl font-bold text-primary">
-                            {mockContestAnalytics.registration_trend.users_this_week}
-                          </span>
-                          <span className="text-sm text-green-400 mb-1">
-                            +{Math.round(((mockContestAnalytics.registration_trend.users_this_week - mockContestAnalytics.registration_trend.users_last_week) / mockContestAnalytics.registration_trend.users_last_week) * 100)}%
-                          </span>
+                        <div className="mt-6 p-4 rounded-lg bg-primary/10 border border-primary/30">
+                          <h4 className="font-medium mb-2">
+                            Revenue {analytics.contest_title ? `· ${analytics.contest_title}` : "· All time"}
+                          </h4>
+                          <p className="text-2xl font-bold text-primary">{formatNaira(analytics.contest_revenue)}</p>
+                          <p className="text-sm text-muted-foreground">Verified successful payments</p>
                         </div>
-                      </div>
-                    </div>
-                    <div className="mt-6 p-4 rounded-lg bg-primary/10 border border-primary/30">
-                      <h4 className="font-medium mb-2">Revenue This Contest</h4>
-                      <p className="text-2xl font-bold text-primary">${mockDashboardStats.total_revenue.toLocaleString()}</p>
-                      <p className="text-sm text-muted-foreground">From {mockDashboardStats.total_artists} artist registrations</p>
-                    </div>
+                      </>
+                    ) : (
+                      <p className="py-8 text-center text-sm text-muted-foreground">Analytics are not available.</p>
+                    )}
                   </CardContent>
                 </Card>
               </div>
@@ -641,6 +1113,55 @@ const Admin = () => {
           </Tabs>
         </motion.div>
       </main>
+
+      <Dialog open={isEditingSeasonDates} onOpenChange={setIsEditingSeasonDates}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit {contest?.title || "season"} dates</DialogTitle>
+            <DialogDescription>
+              Set the season start, submission close, and voting end in chronological order.
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={saveSeasonDates} className="space-y-4">
+            <label className="block space-y-2 text-sm">
+              <span>Season starts</span>
+              <Input
+                type="datetime-local"
+                value={seasonDateForm.start_date}
+                onChange={(event) => setSeasonDateForm((form) => ({ ...form, start_date: event.target.value }))}
+                required
+              />
+            </label>
+            <label className="block space-y-2 text-sm">
+              <span>Submission closes</span>
+              <Input
+                type="datetime-local"
+                value={seasonDateForm.submission_end_date}
+                onChange={(event) => setSeasonDateForm((form) => ({ ...form, submission_end_date: event.target.value }))}
+                required
+              />
+            </label>
+            <label className="block space-y-2 text-sm">
+              <span>Voting ends</span>
+              <Input
+                type="datetime-local"
+                value={seasonDateForm.voting_end_date}
+                onChange={(event) => setSeasonDateForm((form) => ({ ...form, voting_end_date: event.target.value }))}
+                required
+              />
+            </label>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setIsEditingSeasonDates(false)} disabled={isSavingSeasonDates}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={isSavingSeasonDates}>
+                {isSavingSeasonDates && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                {isSavingSeasonDates ? "Saving..." : "Save dates"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
 
       {/* Approval/Rejection Dialog */}
       <Dialog open={!!selectedSong && !!actionType} onOpenChange={() => { setSelectedSong(null); setActionType(null); }}>
@@ -651,11 +1172,46 @@ const Admin = () => {
             </DialogTitle>
             <DialogDescription>
               {actionType === "approve"
-                ? `Are you sure you want to approve "${selectedSong?.title}" by ${selectedSong?.artist_name}?`
+                ? `Review "${selectedSong?.title}" by ${selectedSong?.artist?.stage_name || "Unknown artist"} before approving.`
                 : `Please provide a reason for rejecting "${selectedSong?.title}".`
               }
             </DialogDescription>
           </DialogHeader>
+
+          {selectedSong && (
+            <div className="space-y-4">
+              <div className="flex items-center gap-3 rounded-lg bg-secondary/40 p-3">
+                {getMediaUrl(selectedSong.cover_image || selectedSong.artist?.profile_image) ? (
+                  <img
+                    src={getMediaUrl(selectedSong.cover_image || selectedSong.artist?.profile_image) || undefined}
+                    alt=""
+                    className="h-14 w-14 rounded-md object-cover"
+                  />
+                ) : (
+                  <div className="h-14 w-14 rounded-md bg-primary/10 flex items-center justify-center">
+                    <Music className="h-6 w-6 text-primary" />
+                  </div>
+                )}
+                <div className="min-w-0">
+                  <p className="font-semibold truncate">{selectedSong.title}</p>
+                  <p className="text-sm text-muted-foreground">
+                    {selectedSong.artist?.stage_name || "Unknown artist"} · {formatDuration(selectedSong.duration)}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Submitted {selectedSong.created_at ? new Date(selectedSong.created_at).toLocaleString() : "date unavailable"}
+                  </p>
+                </div>
+              </div>
+              <audio
+                controls
+                preload="none"
+                src={getMediaUrl(selectedSong.audio_url) || undefined}
+                className="w-full"
+              >
+                Your browser does not support audio playback.
+              </audio>
+            </div>
+          )}
           
           {actionType === "reject" && (
             <Textarea
@@ -672,10 +1228,13 @@ const Admin = () => {
             </Button>
             <Button
               variant={actionType === "approve" ? "default" : "destructive"}
-              onClick={() => selectedSong && handleSongAction(selectedSong.id, actionType!)}
-              disabled={actionType === "reject" && !rejectionReason.trim()}
+              onClick={() => selectedSong && actionType && void handleSongAction(String(selectedSong.id), actionType)}
+              disabled={isSongActionLoading || (actionType === "reject" && !rejectionReason.trim())}
             >
-              {actionType === "approve" ? "Approve Song" : "Reject Song"}
+              {isSongActionLoading && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              {isSongActionLoading
+                ? "Saving..."
+                : actionType === "approve" ? "Approve Song" : "Reject Song"}
             </Button>
           </DialogFooter>
         </DialogContent>

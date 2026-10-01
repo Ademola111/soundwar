@@ -3,10 +3,11 @@ Admin Routes
 """
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
-from datetime import datetime
+from datetime import date, datetime, time, timedelta
 from functools import wraps
-
-from ..models import db, User, Artist, Song, Vote, Contest, ContestWinner, Payment
+from soundwarapp import csrf, db
+from soundwarapp.models import User, Artist, Song, Vote, Contest, ContestEntry, ContestWinner, Payment
+from soundwarapp.utils.reparticipation import process_reparticipation_notifications, start_reparticipation_scheduler
 
 admin_bp = Blueprint('admin', __name__, url_prefix='/api/admin')
 
@@ -29,30 +30,89 @@ def admin_required(f):
 @admin_bp.route('/dashboard', methods=['GET'])
 @admin_required
 def get_dashboard():
-    """Get admin dashboard statistics"""
+    """Get platform totals and active-season dashboard statistics."""
+    contest = Contest.get_current()
+    if contest:
+        season_songs = Song.query.filter_by(contest_id=contest.id)
+        season_artist_ids = {
+            artist_id for (artist_id,) in db.session.query(ContestEntry.artist_id).filter_by(
+                contest_id=contest.id
+            ).all()
+        }
+        season_artist_ids.update(
+            artist_id for (artist_id,) in db.session.query(Song.artist_id).filter_by(
+                contest_id=contest.id
+            ).distinct().all()
+        )
+        season_votes = Vote.query.filter_by(contest_id=contest.id)
+        season_payments = Payment.query.filter_by(contest_id=contest.id, status='successful')
+        total_revenue = db.session.query(
+            db.func.coalesce(db.func.sum(Payment.amount), 0)
+        ).filter_by(contest_id=contest.id, status='successful').scalar()
+    else:
+        season_songs = Song.query.filter(db.false())
+        season_artist_ids = set()
+        season_votes = Vote.query.filter(db.false())
+        season_payments = Payment.query.filter(db.false())
+        total_revenue = 0
+
     stats = {
         'total_users': User.query.count(),
-        'total_artists': Artist.query.filter_by(is_paid=True).count(),
-        'total_songs': Song.query.count(),
-        'pending_songs': Song.query.filter_by(status='pending').count(),
-        'approved_songs': Song.query.filter_by(status='approved').count(),
-        'total_votes': Vote.query.count(),
-        'total_payments': Payment.query.filter_by(status='successful').count()
+        'total_artists': len(season_artist_ids),
+        'total_songs': season_songs.count(),
+        'pending_songs': season_songs.filter_by(status='pending').count(),
+        'approved_songs': season_songs.filter_by(status='approved').count(),
+        'total_votes': season_votes.count(),
+        'total_payments': season_payments.count(),
+        'total_revenue': float(total_revenue or 0),
     }
-    
-    contest = Contest.get_current()
+
+    recent_activity = []
+    if contest:
+        season_end = contest.voting_end_date
+        for user in User.query.filter(
+            User.created_at >= contest.start_date,
+            User.created_at <= season_end,
+        ).order_by(User.created_at.desc()).limit(5).all():
+            recent_activity.append({
+                'timestamp': user.created_at.isoformat() if user.created_at else None,
+                'type': 'user',
+                'title': 'New user registered this season',
+                'detail': user.username,
+            })
+    for song in season_songs.order_by(Song.created_at.desc()).limit(5).all():
+        recent_activity.append({
+            'timestamp': song.created_at.isoformat() if song.created_at else None,
+            'type': 'song',
+            'title': 'Song submitted for approval',
+            'detail': f'{song.title} by {song.artist.stage_name}',
+        })
+    for payment in season_payments.order_by(Payment.verified_at.desc()).limit(5).all():
+        activity_time = payment.verified_at or payment.created_at
+        recent_activity.append({
+            'timestamp': activity_time.isoformat() if activity_time else None,
+            'type': 'payment',
+            'title': 'Payment received',
+            'detail': f'{payment.currency} {float(payment.amount):,.2f} · {payment.user.username}',
+        })
+    recent_activity.sort(key=lambda activity: activity['timestamp'] or '', reverse=True)
     
     return jsonify({
         'stats': stats,
-        'current_contest': contest.to_dict() if contest else None
+        'current_contest': contest.to_dict() if contest else None,
+        'recent_activity': recent_activity[:6],
     }), 200
 
 
 @admin_bp.route('/songs/pending', methods=['GET'])
 @admin_required
 def get_pending_songs():
-    """Get all pending song submissions"""
-    songs = Song.query.filter_by(status='pending').all()
+    """Get pending song submissions for the active contest season."""
+    contest = Contest.get_current()
+    songs = Song.query.filter_by(
+        contest_id=contest.id if contest else None,
+        status='pending',
+    ).all() if contest else []
     
     return jsonify({
         'songs': [song.to_dict() for song in songs]
@@ -60,6 +120,7 @@ def get_pending_songs():
 
 
 @admin_bp.route('/songs/<int:song_id>/approve', methods=['POST'])
+@csrf.exempt
 @admin_required
 def approve_song(song_id):
     """Approve a song submission"""
@@ -82,6 +143,7 @@ def approve_song(song_id):
 
 
 @admin_bp.route('/songs/<int:song_id>/reject', methods=['POST'])
+@csrf.exempt
 @admin_required
 def reject_song(song_id):
     """Reject a song submission"""
@@ -116,23 +178,111 @@ def get_contests():
     }), 200
 
 
+@admin_bp.route('/contests/<int:contest_id>/phase', methods=['POST'])
+@csrf.exempt
+@admin_required
+def advance_contest_phase(contest_id):
+    """Advance a contest one phase and persist the admin override."""
+    contest = Contest.query.get(contest_id)
+    if not contest:
+        return jsonify({'error': 'Contest not found'}), 404
+
+    next_phase = {
+        'submission': 'voting',
+        'voting': 'completed',
+    }.get(contest.get_phase())
+    if not next_phase:
+        return jsonify({'error': 'This contest has already completed'}), 409
+
+    data = request.get_json(silent=True) or {}
+    requested_phase = data.get('phase') if isinstance(data, dict) else None
+    if requested_phase != next_phase:
+        return jsonify({'error': f'The next phase must be {next_phase}'}), 400
+
+    contest.phase = next_phase
+    contest.phase_override = True
+    db.session.commit()
+
+    return jsonify({
+        'message': f'Contest advanced to {next_phase}',
+        'contest': contest.to_dict(),
+    }), 200
+
+
+@admin_bp.route('/contests/<int:contest_id>/dates', methods=['PUT'])
+@csrf.exempt
+@admin_required
+def update_contest_dates(contest_id):
+    """Update contest milestone dates without changing its current phase."""
+    contest = Contest.query.get(contest_id)
+    if not contest:
+        return jsonify({'error': 'Contest not found'}), 404
+
+    data = request.get_json(silent=True) or {}
+    if not isinstance(data, dict):
+        return jsonify({'error': 'Invalid contest date data'}), 400
+
+    date_fields = ('start_date', 'submission_end_date', 'voting_end_date')
+    if any(not data.get(field) for field in date_fields):
+        return jsonify({'error': 'Start, submission close, and voting end dates are required'}), 400
+
+    try:
+        start_date = datetime.fromisoformat(data['start_date'])
+        submission_end_date = datetime.fromisoformat(data['submission_end_date'])
+        voting_end_date = datetime.fromisoformat(data['voting_end_date'])
+    except (TypeError, ValueError):
+        return jsonify({'error': 'Contest dates must be valid ISO date/time values'}), 400
+
+    if not start_date < submission_end_date < voting_end_date:
+        return jsonify({'error': 'Contest dates must be ordered: start, submission close, then voting end'}), 400
+
+    contest.start_date = start_date
+    contest.submission_end_date = submission_end_date
+    contest.voting_end_date = voting_end_date
+    db.session.commit()
+
+    return jsonify({
+        'message': 'Contest dates updated successfully',
+        'contest': contest.to_dict(),
+    }), 200
+
+
 @admin_bp.route('/contests', methods=['POST'])
+@csrf.exempt
 @admin_required
 def create_contest():
-    """Create a new contest"""
-    data = request.get_json()
+    """Create a new contest with the next sequential season title."""
+    data = request.get_json(silent=True) or {}
+    if not isinstance(data, dict):
+        return jsonify({'error': 'Invalid contest data'}), 400
+
+    required_dates = ('start_date', 'submission_end_date', 'voting_end_date')
+    if any(not data.get(field) for field in required_dates):
+        return jsonify({'error': 'Start, submission close, and voting end dates are required'}), 400
+
+    try:
+        start_date = datetime.fromisoformat(data['start_date'])
+        submission_end_date = datetime.fromisoformat(data['submission_end_date'])
+        voting_end_date = datetime.fromisoformat(data['voting_end_date'])
+    except (TypeError, ValueError):
+        return jsonify({'error': 'Contest dates must be valid ISO date/time values'}), 400
+
+    if not start_date < submission_end_date < voting_end_date:
+        return jsonify({'error': 'Contest dates must be ordered: start, submission close, then voting end'}), 400
     
     # Deactivate current contest
     current = Contest.get_current()
     if current:
         current.is_active = False
+
+    next_season_number = Contest.query.count() + 1
     
     contest = Contest(
-        title=data.get('title'),
+        title=f'Season {next_season_number}',
         description=data.get('description'),
-        start_date=datetime.fromisoformat(data.get('start_date')),
-        submission_end_date=datetime.fromisoformat(data.get('submission_end_date')),
-        voting_end_date=datetime.fromisoformat(data.get('voting_end_date')),
+        start_date=start_date,
+        submission_end_date=submission_end_date,
+        voting_end_date=voting_end_date,
         is_active=True
     )
     
@@ -143,6 +293,17 @@ def create_contest():
         'message': 'Contest created',
         'contest': contest.to_dict()
     }), 201
+
+
+@admin_bp.route('/reparticipation-notifications', methods=['POST'])
+@admin_required
+def trigger_reparticipation_notifications():
+    """Manually trigger past winner re-participation reminder emails."""
+    sent = process_reparticipation_notifications()
+    return jsonify({
+        'message': 'Re-participation notification sweep completed',
+        'notifications_sent': sent
+    }), 200
 
 
 @admin_bp.route('/contests/<int:contest_id>/finalize', methods=['POST'])
@@ -177,6 +338,9 @@ def finalize_contest(contest_id):
     contest.is_active = False
     contest.phase = 'completed'
     
+    # Reset notification state so this artist can be alerted again after the next cooldown period
+    winning_song.artist.reparticipation_notified_at = None
+
     db.session.add(winner)
     db.session.commit()
     
@@ -211,9 +375,121 @@ def get_all_winners():
 @admin_bp.route('/users', methods=['GET'])
 @admin_required
 def get_users():
-    """Get all users"""
+    """Get all users with activity counts for the active contest season."""
+    contest = Contest.get_current()
     users = User.query.order_by(User.created_at.desc()).all()
+    song_query = db.session.query(
+        Song.artist_id,
+        db.func.count(Song.id),
+        db.func.sum(Song.vote_count),
+    )
+    vote_query = db.session.query(Vote.user_id, db.func.count(Vote.id))
+    if contest:
+        song_query = song_query.filter(Song.contest_id == contest.id)
+        vote_query = vote_query.filter(Vote.contest_id == contest.id)
+    else:
+        song_query = song_query.filter(db.false())
+        vote_query = vote_query.filter(db.false())
+    song_stats = {
+        artist_id: (song_count, int(votes_received or 0))
+        for artist_id, song_count, votes_received in song_query.group_by(Song.artist_id).all()
+    }
+    votes_cast_by_user = dict(vote_query.group_by(Vote.user_id).all())
+
+    user_data = []
+    for user in users:
+        artist = user.artist
+        songs_count, votes_received = song_stats.get(artist.id, (0, 0)) if artist else (0, 0)
+        entry = artist.get_contest_entry(contest) if artist and contest else None
+        user_data.append({
+            'id': user.id,
+            'name': user.name,
+            'username': user.username,
+            'email': user.email,
+            'roles': user.roles if isinstance(user.roles, list) else [user.roles],
+            'artist_profile': artist.to_dict() if artist else None,
+            'status': (
+                'pending_payment' if entry and not entry.is_paid
+                else 'active' if entry
+                else 'not_entered' if artist and contest
+                else 'active'
+            ),
+            'songs_count': songs_count,
+            'votes_received': votes_received,
+            'votes_cast': votes_cast_by_user.get(user.id, 0),
+            'created_at': user.created_at.isoformat() if user.created_at else None,
+        })
     
     return jsonify({
-        'users': [user.to_dict() for user in users]
+        'users': user_data
+    }), 200
+
+
+@admin_bp.route('/analytics', methods=['GET'])
+@admin_required
+def get_analytics():
+    """Get live analytics for the active contest season."""
+    contest = Contest.get_current()
+    now = datetime.now()
+    today = now.date()
+    first_day = today - timedelta(days=6)
+    daily_votes = []
+    for day_offset in range(7):
+        day = first_day + timedelta(days=day_offset)
+        day_start = datetime.combine(day, time.min)
+        day_end = day_start + timedelta(days=1)
+        daily_votes.append({
+            'date': day.isoformat(),
+            'label': day.strftime('%b %d'),
+            'votes': Vote.query.filter(
+                Vote.created_at >= day_start,
+                Vote.created_at < day_end,
+                Vote.contest_id == contest.id if contest else db.false(),
+            ).count(),
+        })
+
+    this_week_start = datetime.combine(today - timedelta(days=6), time.min)
+    previous_week_start = this_week_start - timedelta(days=7)
+    current_artist_registrations = ContestEntry.query.filter(
+        ContestEntry.created_at >= this_week_start,
+        ContestEntry.contest_id == contest.id if contest else db.false(),
+    ).count()
+    previous_artist_registrations = ContestEntry.query.filter(
+        ContestEntry.created_at >= previous_week_start,
+        ContestEntry.created_at < this_week_start,
+        ContestEntry.contest_id == contest.id if contest else db.false(),
+    ).count()
+    current_user_registrations = User.query.filter(User.created_at >= this_week_start).count()
+    previous_user_registrations = User.query.filter(
+        User.created_at >= previous_week_start,
+        User.created_at < this_week_start,
+    ).count()
+
+    top_songs = []
+    if contest:
+        songs = Song.query.filter_by(contest_id=contest.id, status='approved').order_by(
+            Song.vote_count.desc()
+        ).limit(5).all()
+        top_songs = [{
+            'title': song.title,
+            'artist': song.artist.stage_name,
+            'votes': song.vote_count,
+        } for song in songs]
+
+    revenue_query = db.session.query(db.func.coalesce(db.func.sum(Payment.amount), 0)).filter(
+        Payment.status == 'successful',
+        Payment.contest_id == contest.id if contest else db.false(),
+    )
+
+    return jsonify({
+        'daily_votes': daily_votes,
+        'top_songs': top_songs,
+        'registration_trend': {
+            'artists_this_week': current_artist_registrations,
+            'artists_last_week': previous_artist_registrations,
+            'users_this_week': current_user_registrations,
+            'users_last_week': previous_user_registrations,
+        },
+        'contest_revenue': float(revenue_query.scalar() or 0),
+        'contest_title': contest.title if contest else None,
     }), 200

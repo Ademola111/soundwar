@@ -30,10 +30,10 @@ const PaymentCancel = () => {
               </p>
 
               <div className="space-y-3">
-                <Link to="/register">
+                <Link to="/payment">
                   <Button variant="hero" size="lg" className="w-full">
                     <ArrowLeft className="w-4 h-4 mr-2" />
-                    Return to Registration
+                    Try Payment Again
                   </Button>
                 </Link>
                 

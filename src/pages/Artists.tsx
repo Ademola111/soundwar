@@ -1,85 +1,103 @@
 import { motion } from "framer-motion";
-import { Music, Users, Trophy } from "lucide-react";
+import { Check, Heart, Lock, Music, Music2, RefreshCw, Users, Trophy } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
 import { Button } from "@/components/ui/button";
 import { Link } from "react-router-dom";
+import { API_ENDPOINTS } from "@/config/api";
+import { useAuth } from "@/contexts/AuthContext";
+import { useVoting } from "@/hooks/useVoting";
+import { useToast } from "@/hooks/use-toast";
 
 interface Artist {
   id: string;
+  songId: string;
   name: string;
-  avatar: string;
-  genre: string;
+  avatar: string | null;
+  genre: string | null;
   songTitle: string;
-  songCover: string;
+  songCover: string | null;
   votes: number;
   rank: number;
 }
 
-const mockArtists: Artist[] = [
-  {
-    id: "1",
-    name: "Luna Wave",
-    avatar: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=200&h=200&fit=crop",
-    genre: "Electronic",
-    songTitle: "Midnight Dreams",
-    songCover: "https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=400&h=400&fit=crop",
-    votes: 2847,
-    rank: 1,
-  },
-  {
-    id: "2",
-    name: "Neon Beats",
-    avatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&h=200&fit=crop",
-    genre: "Pop",
-    songTitle: "Electric Soul",
-    songCover: "https://images.unsplash.com/photo-1514320291840-2e0a9bf2a9ae?w=400&h=400&fit=crop",
-    votes: 2456,
-    rank: 2,
-  },
-  {
-    id: "3",
-    name: "Cosmic Echo",
-    avatar: "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=200&h=200&fit=crop",
-    genre: "Indie",
-    songTitle: "Starlight",
-    songCover: "https://images.unsplash.com/photo-1511379938547-c1f69419868d?w=400&h=400&fit=crop",
-    votes: 2134,
-    rank: 3,
-  },
-  {
-    id: "4",
-    name: "Street Harmony",
-    avatar: "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=200&h=200&fit=crop",
-    genre: "Hip-Hop",
-    songTitle: "Urban Rhythm",
-    songCover: "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=400&h=400&fit=crop",
-    votes: 1987,
-    rank: 4,
-  },
-  {
-    id: "5",
-    name: "Surf Sound",
-    avatar: "https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=200&h=200&fit=crop",
-    genre: "Chill",
-    songTitle: "Ocean Waves",
-    songCover: "https://images.unsplash.com/photo-1459749411175-04bf5292ceea?w=400&h=400&fit=crop",
-    votes: 1756,
-    rank: 5,
-  },
-  {
-    id: "6",
-    name: "Night Owl",
-    avatar: "https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=200&h=200&fit=crop",
-    genre: "R&B",
-    songTitle: "Late Night Vibes",
-    songCover: "https://images.unsplash.com/photo-1484972759836-b93f9ef2b293?w=400&h=400&fit=crop",
-    votes: 1523,
-    rank: 6,
-  },
-];
+interface ApiSong {
+  id: number;
+  artist_id: number;
+  title: string;
+  cover_image: string | null;
+  vote_count: number;
+  artist?: {
+    id: number;
+    stage_name: string;
+    profile_image: string | null;
+    genre?: string | null;
+  } | null;
+}
+
+const resolveMediaUrl = (url: string | null | undefined) => {
+  if (!url) return null;
+  return new URL(url, new URL(API_ENDPOINTS.SONGS.BASE).origin).toString();
+};
+
+const fetchCompetitors = async (): Promise<Artist[]> => {
+  const response = await fetch(API_ENDPOINTS.SONGS.BASE);
+  if (!response.ok) throw new Error("Could not load competitors for the active contest.");
+
+  const data = await response.json() as { songs: ApiSong[] };
+  return data.songs.map((song, index) => ({
+    id: String(song.artist?.id || song.artist_id),
+    songId: String(song.id),
+    name: song.artist?.stage_name || "Unknown artist",
+    avatar: resolveMediaUrl(song.artist?.profile_image),
+    genre: song.artist?.genre || null,
+    songTitle: song.title,
+    songCover: resolveMediaUrl(song.cover_image || song.artist?.profile_image),
+    votes: song.vote_count || 0,
+    rank: index + 1,
+  }));
+};
 
 const Artists = () => {
+  const { data: artists = [], isLoading, isError, error, refetch } = useQuery({
+    queryKey: ["competitors"],
+    queryFn: fetchCompetitors,
+    refetchInterval: 30_000,
+  });
+  const { isAuthenticated, isLoading: isAuthLoading } = useAuth();
+  const { voteInfo, castVote, isLoading: isVoting, isVoteDisabled } = useVoting();
+  const { toast } = useToast();
+
+  const handleVote = async (songId: string) => {
+    const result = await castVote(songId);
+    if (!result.success) {
+      toast({
+        title: "Vote failed",
+        description: result.error || "Unable to cast your vote.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    await refetch();
+    toast({ title: "Vote recorded", description: "Thank you for supporting this artist." });
+  };
+
+  const getVoteButton = (songId: string) => {
+    if (voteInfo.votedSongId === songId) {
+      return <Button variant="default" size="sm" disabled className="bg-primary"><Check className="w-4 h-4 mr-1" />Voted</Button>;
+    }
+    if (isVoteDisabled) {
+      return <Button variant="outline" size="sm" disabled><Lock className="w-4 h-4 mr-1" />Locked</Button>;
+    }
+    return (
+      <Button variant="vote" size="sm" onClick={() => void handleVote(songId)} disabled={isVoting}>
+        <Heart className="w-4 h-4 mr-1" />Vote Now
+      </Button>
+    );
+  };
+
   return (
     <div className="min-h-screen bg-background">
       <Navbar />
@@ -105,7 +123,24 @@ const Artists = () => {
 
           {/* Artists Grid */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 max-w-6xl mx-auto">
-            {mockArtists.map((artist, index) => (
+            {isLoading ? (
+              <p className="col-span-full py-12 text-center text-muted-foreground" role="status">Loading current competitors...</p>
+            ) : isError ? (
+              <div className="col-span-full py-12 text-center" role="alert">
+                <p className="text-muted-foreground">
+                  {error instanceof Error ? error.message : "Could not load current competitors."}
+                </p>
+                <Button variant="outline" className="mt-4" onClick={() => void refetch()}>
+                  <RefreshCw className="w-4 h-4 mr-2" />Try again
+                </Button>
+              </div>
+            ) : artists.length === 0 ? (
+              <div className="col-span-full py-12 text-center text-muted-foreground">
+                <Users className="w-10 h-10 mx-auto mb-3 opacity-60" />
+                <p className="font-medium text-foreground">No competitors yet</p>
+                <p className="text-sm mt-1">Approved song submissions will appear here during the active contest.</p>
+              </div>
+            ) : artists.map((artist, index) => (
               <motion.div
                 key={artist.id}
                 initial={{ opacity: 0, y: 30 }}
@@ -115,11 +150,17 @@ const Artists = () => {
               >
                 {/* Song Cover Background */}
                 <div className="relative h-40">
-                  <img
-                    src={artist.songCover}
-                    alt={artist.songTitle}
-                    className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
-                  />
+                  {artist.songCover ? (
+                    <img
+                      src={artist.songCover}
+                      alt={`${artist.songTitle} cover art`}
+                      className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+                    />
+                  ) : (
+                    <div className="w-full h-full bg-primary/10 flex items-center justify-center">
+                      <Music2 className="w-12 h-12 text-primary" />
+                    </div>
+                  )}
                   <div className="absolute inset-0 bg-gradient-to-t from-background to-transparent" />
                   
                   {/* Rank Badge */}
@@ -136,14 +177,20 @@ const Artists = () => {
 
                 {/* Artist Info */}
                 <div className="p-6 -mt-12 relative">
-                  <img
-                    src={artist.avatar}
-                    alt={artist.name}
-                    className="w-20 h-20 rounded-full border-4 border-background object-cover mb-4"
-                  />
+                  {artist.avatar ? (
+                    <img
+                      src={artist.avatar}
+                      alt={artist.name}
+                      className="w-20 h-20 rounded-full border-4 border-background object-cover mb-4"
+                    />
+                  ) : (
+                    <div className="w-20 h-20 rounded-full border-4 border-background bg-accent/20 flex items-center justify-center mb-4">
+                      <Users className="w-8 h-8 text-accent" />
+                    </div>
+                  )}
                   <h3 className="font-display text-xl font-bold mb-1">{artist.name}</h3>
                   <span className="inline-block px-3 py-1 rounded-full bg-primary/20 text-primary text-xs font-semibold mb-4">
-                    {artist.genre}
+                    {artist.genre || "Genre not specified"}
                   </span>
                   
                   {/* Song Info */}
@@ -160,9 +207,7 @@ const Artists = () => {
                       </div>
                       <p className="text-xs text-muted-foreground">votes received</p>
                     </div>
-                    <Button variant="vote" size="sm">
-                      Vote Now
-                    </Button>
+                    {getVoteButton(artist.songId)}
                   </div>
                 </div>
               </motion.div>
@@ -170,19 +215,21 @@ const Artists = () => {
           </div>
 
           {/* CTA */}
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.6 }}
-            className="text-center mt-12"
-          >
-            <p className="text-muted-foreground mb-4">Are you an artist?</p>
-            <Link to="/register">
-              <Button variant="hero" size="lg">
-                Join the Competition
-              </Button>
-            </Link>
-          </motion.div>
+          {!isAuthLoading && !isAuthenticated && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.6 }}
+              className="text-center mt-12"
+            >
+              <p className="text-muted-foreground mb-4">Are you an artist?</p>
+              <Link to="/register">
+                <Button variant="hero" size="lg">
+                  Join the Competition
+                </Button>
+              </Link>
+            </motion.div>
+          )}
         </div>
       </main>
       <Footer />

@@ -1,54 +1,57 @@
 import { motion } from "framer-motion";
-import { Play, Pause, Heart, Trophy, Check, Lock } from "lucide-react";
-import { useState } from "react";
+import { Play, Pause, Heart, Trophy, Check, Lock, Music2, Clock } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useVoting } from "@/hooks/useVoting";
 import { useToast } from "@/hooks/use-toast";
 import { Link } from "react-router-dom";
+import { API_ENDPOINTS } from "@/config/api";
 
 interface Song {
   id: string;
   title: string;
   artist: string;
-  cover: string;
+  cover: string | null;
+  audioUrl: string;
+  duration: number | null;
   votes: number;
   rank: number;
 }
 
-const mockSongs: Song[] = [
-  {
-    id: "1",
-    title: "Midnight Dreams",
-    artist: "Luna Wave",
-    cover: "https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=400&h=400&fit=crop",
-    votes: 2847,
-    rank: 1,
-  },
-  {
-    id: "2",
-    title: "Electric Soul",
-    artist: "Neon Beats",
-    cover: "https://images.unsplash.com/photo-1514320291840-2e0a9bf2a9ae?w=400&h=400&fit=crop",
-    votes: 2456,
-    rank: 2,
-  },
-  {
-    id: "3",
-    title: "Starlight",
-    artist: "Cosmic Echo",
-    cover: "https://images.unsplash.com/photo-1511379938547-c1f69419868d?w=400&h=400&fit=crop",
-    votes: 2134,
-    rank: 3,
-  },
-  {
-    id: "4",
-    title: "Urban Rhythm",
-    artist: "Street Harmony",
-    cover: "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=400&h=400&fit=crop",
-    votes: 1987,
-    rank: 4,
-  },
-];
+interface ApiSong {
+  id: number;
+  title: string;
+  audio_url: string;
+  cover_image: string | null;
+  duration: number | null;
+  vote_count: number;
+  artist?: {
+    stage_name: string;
+    profile_image: string | null;
+  } | null;
+}
+
+const resolveMediaUrl = (url: string | null | undefined) => {
+  if (!url) return null;
+  return new URL(url, new URL(API_ENDPOINTS.SONGS.BASE).origin).toString();
+};
+
+const fetchFeaturedSongs = async (signal?: AbortSignal): Promise<Song[]> => {
+  const response = await fetch(API_ENDPOINTS.SONGS.BASE, { signal });
+  if (!response.ok) throw new Error("Could not load current contenders.");
+
+  const data = await response.json() as { songs: ApiSong[] };
+  return data.songs.slice(0, 4).map((song, index) => ({
+    id: String(song.id),
+    title: song.title,
+    artist: song.artist?.stage_name || "Unknown artist",
+    cover: resolveMediaUrl(song.cover_image || song.artist?.profile_image),
+    audioUrl: resolveMediaUrl(song.audio_url) || song.audio_url,
+    duration: song.duration,
+    votes: song.vote_count || 0,
+    rank: index + 1,
+  }));
+};
 
 const getRankBadge = (rank: number) => {
   switch (rank) {
@@ -63,10 +66,68 @@ const getRankBadge = (rank: number) => {
   }
 };
 
+const formatDuration = (duration: number | null) => {
+  if (duration === null) return null;
+  const minutes = Math.floor(duration / 60);
+  return `${minutes}:${String(duration % 60).padStart(2, "0")}`;
+};
+
 export const FeaturedSongs = () => {
   const [playingId, setPlayingId] = useState<string | null>(null);
+  const [songs, setSongs] = useState<Song[]>([]);
+  const [songsLoading, setSongsLoading] = useState(true);
+  const [songsError, setSongsError] = useState("");
+  const audioElements = useRef(new Map<string, HTMLAudioElement>());
   const { voteInfo, castVote, isLoading, isVoteDisabled } = useVoting();
   const { toast } = useToast();
+
+  useEffect(() => {
+    const controller = new AbortController();
+    fetchFeaturedSongs(controller.signal)
+      .then(setSongs)
+      .catch((error: unknown) => {
+        if (!controller.signal.aborted) {
+          setSongsError(error instanceof Error ? error.message : "Could not load current contenders.");
+        }
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setSongsLoading(false);
+      });
+
+    return () => controller.abort();
+  }, []);
+
+  const refreshSongs = async () => {
+    try {
+      setSongs(await fetchFeaturedSongs());
+      setSongsError("");
+    } catch {
+      setSongsError("Could not refresh contender votes.");
+    }
+  };
+
+  const handlePlayback = async (song: Song) => {
+    const audio = audioElements.current.get(song.id);
+    if (!audio) return;
+
+    if (playingId === song.id) {
+      audio.pause();
+      setPlayingId(null);
+      return;
+    }
+
+    audioElements.current.forEach((element) => element.pause());
+    try {
+      await audio.play();
+      setPlayingId(song.id);
+    } catch {
+      toast({
+        title: "Playback failed",
+        description: "This track could not be played right now.",
+        variant: "destructive",
+      });
+    }
+  };
 
   const handleVote = async (songId: string) => {
     // Security: Prevent voting if already voted
@@ -82,6 +143,7 @@ export const FeaturedSongs = () => {
     const result = await castVote(songId);
     
     if (result.success) {
+      void refreshSongs();
       toast({
         title: "Vote Cast Successfully!",
         description: "Thank you for voting. Your vote has been recorded.",
@@ -145,7 +207,20 @@ export const FeaturedSongs = () => {
         </motion.div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-          {mockSongs.map((song, index) => (
+          {songsLoading ? (
+            <p className="col-span-full py-10 text-center text-muted-foreground" role="status">
+              Loading current contenders...
+            </p>
+          ) : songsError ? (
+            <div className="col-span-full py-10 text-center" role="alert">
+              <p className="text-muted-foreground">{songsError}</p>
+              <Button variant="outline" className="mt-3" onClick={refreshSongs}>Try again</Button>
+            </div>
+          ) : songs.length === 0 ? (
+            <p className="col-span-full py-10 text-center text-muted-foreground">
+              No approved songs in the current contest yet.
+            </p>
+          ) : songs.map((song, index) => (
             <motion.div
               key={song.id}
               initial={{ opacity: 0, y: 30 }}
@@ -158,14 +233,31 @@ export const FeaturedSongs = () => {
             >
               {/* Cover */}
               <div className="relative mb-4 rounded-xl overflow-hidden aspect-square">
-                <img
-                  src={song.cover}
-                  alt={song.title}
-                  className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+                {song.cover ? (
+                  <img
+                    src={song.cover}
+                    alt={`${song.artist} artwork`}
+                    className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+                  />
+                ) : (
+                  <div className="w-full h-full bg-gradient-primary flex items-center justify-center">
+                    <Music2 className="w-16 h-16 text-primary-foreground/80" />
+                  </div>
+                )}
+                <audio
+                  ref={(element) => {
+                    if (element) audioElements.current.set(song.id, element);
+                    else audioElements.current.delete(song.id);
+                  }}
+                  src={song.audioUrl}
+                  preload="none"
+                  onEnded={() => setPlayingId((current) => current === song.id ? null : current)}
+                  className="hidden"
                 />
                 <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                   <button
-                    onClick={() => setPlayingId(playingId === song.id ? null : song.id)}
+                    onClick={() => void handlePlayback(song)}
+                    aria-label={`${playingId === song.id ? "Pause" : "Play"} ${song.title}`}
                     className="w-14 h-14 rounded-full bg-primary flex items-center justify-center hover:scale-110 transition-transform"
                   >
                     {playingId === song.id ? (
@@ -192,7 +284,15 @@ export const FeaturedSongs = () => {
 
               {/* Info */}
               <h3 className="font-semibold text-foreground truncate">{song.title}</h3>
-              <p className="text-sm text-muted-foreground truncate mb-3">{song.artist}</p>
+              <div className="flex items-center justify-between gap-2 mb-3">
+                <p className="text-sm text-muted-foreground truncate">{song.artist}</p>
+                {formatDuration(song.duration) && (
+                  <span className="shrink-0 flex items-center gap-1 text-xs text-muted-foreground">
+                    <Clock className="w-3.5 h-3.5" />
+                    {formatDuration(song.duration)}
+                  </span>
+                )}
+              </div>
 
               {/* Vote Count & Button */}
               <div className="flex items-center justify-between">
