@@ -78,7 +78,8 @@ def submit_song():
     if not contest:
         return jsonify({'error': 'No active contest'}), 400
 
-    # Check if the artist has paid for this contest season
+    # Returning artists must pay for each new season. First-time artists retain
+    # the existing registration payment flow.
     if not artist.has_paid_for_contest(contest):
         return jsonify({'error': 'Payment required for this contest season'}), 403
 

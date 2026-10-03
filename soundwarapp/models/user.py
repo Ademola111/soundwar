@@ -18,6 +18,7 @@ class User(db.Model):
     profile_image = db.Column(db.String(500), nullable=True)
     roles = db.Column(db.JSON, default=['user'])
     email_verified = db.Column(db.Boolean, nullable=False, default=True)
+    is_active = db.Column(db.Boolean, nullable=False, default=True)
     
     # Password reset
     reset_token = db.Column(db.String(255), nullable=True)
@@ -77,6 +78,7 @@ class User(db.Model):
             'username': self.username,
             'profile_image': self.profile_image,
             'email_verified': self.email_verified,
+            'is_active': self.is_active,
             'roles': self.roles or ['user'],
             'artist_profile': profile,
             'votes_cast': len(vote_history),

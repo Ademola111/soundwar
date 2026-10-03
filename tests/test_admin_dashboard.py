@@ -164,6 +164,7 @@ def test_admin_dashboard_users_and_analytics_use_database_records(admin_dashboar
     users = users_response.get_json()["users"]
     artist = next(user for user in users if user["username"] == "dashboardartist")
     assert artist["status"] == "active"
+    assert artist["is_active"] is True
     assert artist["songs_count"] == 2
     assert artist["votes_received"] == 1
     voter = next(user for user in users if user["username"] == "dashboardvoter")
@@ -180,6 +181,87 @@ def test_admin_dashboard_users_and_analytics_use_database_records(admin_dashboar
     assert analytics["top_songs"][0]["title"] == "Live Song"
     assert analytics["registration_trend"]["artists_this_week"] == 1
     assert analytics["contest_revenue"] == 15000
+
+
+def test_admin_can_activate_and_deactivate_user_accounts(admin_dashboard_client):
+    client, token = admin_dashboard_client
+    headers = {"Authorization": f"Bearer {token}"}
+    users = client.get("/api/admin/users", headers=headers).get_json()["users"]
+    voter = next(user for user in users if user["username"] == "dashboardvoter")
+    voter_token = create_access_token(identity=str(voter["id"]))
+    voter_headers = {"Authorization": f"Bearer {voter_token}"}
+
+    deactivate_response = client.put(
+        f"/api/admin/users/{voter['id']}/status",
+        headers=headers,
+        json={"is_active": False},
+    )
+    assert deactivate_response.status_code == 200
+    assert deactivate_response.get_json()["user"]["is_active"] is False
+    assert client.get("/api/admin/users", headers=voter_headers).status_code == 401
+
+    updated_users = client.get("/api/admin/users", headers=headers).get_json()["users"]
+    updated_voter = next(user for user in updated_users if user["id"] == voter["id"])
+    assert updated_voter["is_active"] is False
+
+    activate_response = client.put(
+        f"/api/admin/users/{voter['id']}/status",
+        headers=headers,
+        json={"is_active": True},
+    )
+    assert activate_response.status_code == 200
+    assert activate_response.get_json()["user"]["is_active"] is True
+
+    invalid_response = client.put(
+        f"/api/admin/users/{voter['id']}/status",
+        headers=headers,
+        json={"is_active": "false"},
+    )
+    assert invalid_response.status_code == 400
+
+
+def test_admin_can_list_and_update_payment_status(admin_dashboard_client):
+    client, token = admin_dashboard_client
+    headers = {"Authorization": f"Bearer {token}"}
+
+    list_response = client.get("/api/admin/payments", headers=headers)
+    assert list_response.status_code == 200
+    payments = list_response.get_json()["payments"]
+    payment = next(record for record in payments if record["tx_ref"] == "dashboard-reference")
+    assert payment["user"]["username"] == "dashboardartist"
+
+    update_response = client.put(
+        f"/api/admin/payments/{payment['id']}/status",
+        headers=headers,
+        json={"status": "reversed"},
+    )
+    assert update_response.status_code == 200
+    assert update_response.get_json()["payment"]["status"] == "reversed"
+    artist_user = next(
+        user for user in client.get("/api/admin/users", headers=headers).get_json()["users"]
+        if user["username"] == "dashboardartist"
+    )
+    assert artist_user["status"] == "pending_payment"
+
+    invalid_response = client.put(
+        f"/api/admin/payments/{payment['id']}/status",
+        headers=headers,
+        json={"status": "failed"},
+    )
+    assert invalid_response.status_code == 400
+
+    restore_response = client.put(
+        f"/api/admin/payments/{payment['id']}/status",
+        headers=headers,
+        json={"status": "successful"},
+    )
+    assert restore_response.status_code == 200
+    assert restore_response.get_json()["payment"]["status"] == "successful"
+    restored_artist = next(
+        user for user in client.get("/api/admin/users", headers=headers).get_json()["users"]
+        if user["username"] == "dashboardartist"
+    )
+    assert restored_artist["status"] == "active"
 
 
 def test_admin_creates_the_next_season_and_rejects_invalid_dates(admin_dashboard_client):

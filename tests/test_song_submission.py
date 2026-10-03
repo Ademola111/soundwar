@@ -92,6 +92,97 @@ def test_submit_song_saves_mp3_and_returns_its_url(submission_client):
     assert saved_covers[0].read_bytes() == b"cover image"
 
 
+def test_returning_artist_must_pay_for_current_contest(submission_client):
+    client, token, upload_folder = submission_client
+    with client.application.app_context():
+        artist = Artist.query.first()
+        current_contest = Contest.query.filter_by(is_active=True).first()
+        db.session.query(ContestEntry).filter_by(
+            artist_id=artist.id,
+            contest_id=current_contest.id,
+        ).delete()
+        db.session.query(Payment).filter_by(contest_id=current_contest.id).delete()
+        previous_contest = Contest(
+            title="Previous Contest",
+            start_date=current_contest.start_date - timedelta(days=30),
+            submission_end_date=current_contest.start_date - timedelta(days=20),
+            voting_end_date=current_contest.start_date - timedelta(days=10),
+            is_active=False,
+        )
+        db.session.add(previous_contest)
+        db.session.flush()
+        assert artist.has_paid_for_contest(current_contest) is True
+        db.session.add(Song(
+            artist_id=artist.id,
+            contest_id=previous_contest.id,
+            title="Previous Track",
+            audio_url="https://example.com/previous-track.mp3",
+            duration=180,
+            status="approved",
+        ))
+        db.session.commit()
+        assert artist.has_paid_for_contest(current_contest) is False
+        assert artist.can_participate_in_contest(current_contest) is False
+        profile = artist.to_dict()
+        assert profile["is_returning_artist"] is True
+        assert profile["requires_season_payment"] is True
+
+    response = client.post(
+        "/api/songs/submit",
+        headers={"Authorization": f"Bearer {token}"},
+        data={
+            "title": "New Season Track",
+            "duration": "185",
+            "audio_file": (BytesIO(b"mp3 data"), "track.mp3"),
+        },
+        content_type="multipart/form-data",
+    )
+
+    assert response.status_code == 403
+    assert response.get_json()["error"] == "Payment required for this contest season"
+    assert list(upload_folder.iterdir()) == []
+
+    with client.application.app_context():
+        artist = Artist.query.first()
+        current_contest = Contest.query.filter_by(is_active=True).first()
+        db.session.add_all([
+            ContestEntry(
+                artist_id=artist.id,
+                contest_id=current_contest.id,
+                is_paid=True,
+                is_verified=True,
+                status="approved",
+            ),
+            Payment(
+                user_id=artist.user_id,
+                contest_id=current_contest.id,
+                transaction_id="tx-current-season",
+                tx_ref="current-season-ref",
+                amount=15000,
+                currency="NGN",
+                status="successful",
+                payment_purpose="contest_registration",
+            ),
+        ])
+        db.session.commit()
+        profile = artist.to_dict()
+        assert profile["has_paid_for_current_contest"] is True
+        assert profile["requires_season_payment"] is False
+
+    paid_response = client.post(
+        "/api/songs/submit",
+        headers={"Authorization": f"Bearer {token}"},
+        data={
+            "title": "New Season Track",
+            "duration": "185",
+            "audio_file": (BytesIO(b"mp3 data"), "track.mp3"),
+        },
+        content_type="multipart/form-data",
+    )
+
+    assert paid_response.status_code == 201, paid_response.get_data(as_text=True)
+
+
 def test_submit_song_rejects_non_mp3_files(submission_client):
     client, token, upload_folder = submission_client
 

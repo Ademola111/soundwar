@@ -327,7 +327,9 @@ const Profile = () => {
                   <>
                     <div className="flex flex-wrap gap-2">
                       <Badge variant={artist.is_verified ? "default" : "secondary"}>{artist.is_verified ? "Verified" : "Verification pending"}</Badge>
-                      <Badge variant={artist.is_paid ? "default" : "outline"}>{artist.is_paid ? "Paid" : "Payment pending"}</Badge>
+                      <Badge variant={artist.is_paid && !artist.requires_season_payment ? "default" : "outline"}>
+                        {artist.requires_season_payment ? "Season payment pending" : artist.is_paid ? "Paid" : "Payment pending"}
+                      </Badge>
                     </div>
                     <p className="text-sm leading-6 text-muted-foreground">{artist.bio || "Add a short bio using Edit profile."}</p>
                     {artist.can_participate === false && (

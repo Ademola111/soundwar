@@ -19,10 +19,10 @@ const Payment = () => {
     if (isAuthLoading) return;
     if (!isAuthenticated) {
       navigate("/login", { replace: true });
-    } else if (artistProfile?.is_paid) {
+    } else if (artistProfile?.is_paid && !artistProfile.requires_season_payment) {
       navigate("/submit", { replace: true });
     }
-  }, [artistProfile?.is_paid, isAuthLoading, isAuthenticated, navigate]);
+  }, [artistProfile?.is_paid, artistProfile?.requires_season_payment, isAuthLoading, isAuthenticated, navigate]);
 
   const handlePayment = async () => {
     if (!token) {
@@ -76,7 +76,9 @@ const Payment = () => {
               </div>
               <h1 className="font-display text-3xl font-bold mb-2">Complete Payment</h1>
               <p className="text-muted-foreground">
-                Complete your artist registration payment to upload your track.
+                {artistProfile?.requires_season_payment
+                  ? "Complete this season's participation payment before uploading your track."
+                  : "Complete your artist registration payment to upload your track."}
               </p>
             </div>
 
@@ -86,7 +88,9 @@ const Payment = () => {
                   <div className="bg-gradient-to-br from-accent/20 to-secondary/20 rounded-xl p-6 border border-accent/30">
                     <div className="flex justify-between items-start gap-4 mb-6">
                       <div>
-                        <h2 className="font-semibold text-lg">Artist Registration</h2>
+                        <h2 className="font-semibold text-lg">
+                          {artistProfile?.requires_season_payment ? "Season Participation" : "Artist Registration"}
+                        </h2>
                         <p className="text-sm text-muted-foreground">SoundWars Competition</p>
                       </div>
                       <p className="text-2xl font-bold text-accent whitespace-nowrap">

@@ -1,6 +1,6 @@
 from flask import Flask, jsonify
 from soundwarapp import db, jwt
-from soundwarapp.models import TokenBlocklist
+from soundwarapp.models import TokenBlocklist, User
 
 @jwt.token_in_blocklist_loader
 def check_if_token_revoked(jwt_header, jwt_payload):
@@ -8,6 +8,20 @@ def check_if_token_revoked(jwt_header, jwt_payload):
     # If jti exists in DB → revoked
     token = db.session.query(TokenBlocklist.id).filter_by(jti=jti).scalar()
     return token is not None
+
+
+@jwt.token_verification_loader
+def verify_user_is_active(jwt_header, jwt_payload):
+    user = User.query.get(jwt_payload.get('sub'))
+    return bool(user and user.is_active)
+
+
+@jwt.token_verification_failed_loader
+def inactive_user_callback(jwt_header, jwt_payload):
+    return jsonify({
+        "status": "error",
+        "message": "This account is deactivated. Contact an administrator.",
+    }), 401
 
 @jwt.revoked_token_loader
 def revoked_token_callback(jwt_header, jwt_payload):

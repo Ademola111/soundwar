@@ -34,7 +34,7 @@ const Submit = () => {
 
   const artistProfile = user?.artist_profile;
   const isArtist = Boolean(artistProfile);
-  const isPaidArtist = Boolean(artistProfile?.is_paid);
+  const isPaidArtist = Boolean(artistProfile?.is_paid && !artistProfile.requires_season_payment);
 
   useEffect(() => {
     return () => {

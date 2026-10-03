@@ -407,6 +407,7 @@ def get_users():
             'username': user.username,
             'email': user.email,
             'roles': user.roles if isinstance(user.roles, list) else [user.roles],
+            'is_active': user.is_active,
             'artist_profile': artist.to_dict() if artist else None,
             'status': (
                 'pending_payment' if entry and not entry.is_paid
@@ -422,6 +423,119 @@ def get_users():
     
     return jsonify({
         'users': user_data
+    }), 200
+
+
+@admin_bp.route('/users/<int:user_id>/status', methods=['PUT'])
+@csrf.exempt
+@admin_required
+def update_user_status(user_id):
+    """Activate or deactivate a user account."""
+    data = request.get_json(silent=True) or {}
+    if not isinstance(data, dict) or not isinstance(data.get('is_active'), bool):
+        return jsonify({'error': 'is_active must be a boolean'}), 400
+
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify({'error': 'User not found'}), 404
+
+    admin_id = get_jwt_identity()
+    if str(user.id) == str(admin_id) and not data['is_active']:
+        return jsonify({'error': 'You cannot deactivate your own admin account'}), 400
+
+    user.is_active = data['is_active']
+    db.session.commit()
+
+    return jsonify({
+        'message': 'User account activated' if user.is_active else 'User account deactivated',
+        'user': {
+            'id': user.id,
+            'is_active': user.is_active,
+        },
+    }), 200
+
+
+@admin_bp.route('/payments', methods=['GET'])
+@admin_required
+def get_payments():
+    """List payment records for admin review."""
+    payments = Payment.query.order_by(Payment.created_at.desc(), Payment.id.desc()).all()
+    return jsonify({
+        'payments': [{
+            **payment.to_dict(),
+            'user': {
+                'id': payment.user.id,
+                'name': payment.user.name,
+                'username': payment.user.username,
+                'email': payment.user.email,
+            } if payment.user else None,
+            'contest_title': payment.contest.title if payment.contest else None,
+        } for payment in payments],
+    }), 200
+
+
+@admin_bp.route('/payments/<int:payment_id>/status', methods=['PUT'])
+@csrf.exempt
+@admin_required
+def update_payment_status(payment_id):
+    """Update a payment's administrative status."""
+    data = request.get_json(silent=True) or {}
+    if not isinstance(data, dict):
+        return jsonify({'error': 'Invalid payment status data'}), 400
+
+    status = data.get('status')
+    if status not in ('pending', 'successful', 'reversed'):
+        return jsonify({'error': 'Status must be pending, successful, or reversed'}), 400
+
+    payment = Payment.query.get(payment_id)
+    if not payment:
+        return jsonify({'error': 'Payment not found'}), 404
+
+    payment.status = status
+    if status == 'successful':
+        payment.verified_at = datetime.utcnow()
+    elif status == 'pending':
+        payment.verified_at = None
+
+    artist = payment.user.artist if payment.user else None
+    if artist and payment.contest_id:
+        entry = ContestEntry.query.filter_by(
+            artist_id=artist.id,
+            contest_id=payment.contest_id,
+        ).first()
+        if entry:
+            has_successful_payment = Payment.query.filter_by(
+                user_id=payment.user_id,
+                contest_id=payment.contest_id,
+                status='successful',
+            ).filter(Payment.id != payment.id).first() is not None or status == 'successful'
+            entry.is_paid = has_successful_payment
+            entry.is_verified = has_successful_payment
+            entry.status = 'approved' if has_successful_payment else 'pending_payment'
+
+    if artist:
+        latest_successful_payment = Payment.query.filter_by(
+            user_id=payment.user_id,
+            status='successful',
+        ).order_by(Payment.verified_at.desc(), Payment.created_at.desc()).first()
+        artist.is_paid = latest_successful_payment is not None
+        artist.is_verified = latest_successful_payment is not None
+        artist.payment_id = latest_successful_payment.id if latest_successful_payment else None
+
+    db.session.commit()
+
+    return jsonify({
+        'message': 'Payment status updated',
+        'payment': {
+            **payment.to_dict(),
+            'user': {
+                'id': payment.user.id,
+                'name': payment.user.name,
+                'username': payment.user.username,
+                'email': payment.user.email,
+            } if payment.user else None,
+            'contest_title': payment.contest.title if payment.contest else None,
+        },
     }), 200
 
 

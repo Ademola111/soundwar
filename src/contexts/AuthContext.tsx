@@ -19,6 +19,9 @@ export interface User {
     genre?: string;
     is_paid?: boolean;
     is_verified?: boolean;
+    is_returning_artist?: boolean;
+    has_paid_for_current_contest?: boolean;
+    requires_season_payment?: boolean;
     can_participate?: boolean;
     months_until_eligible?: number;
     total_votes?: number;

@@ -193,7 +193,7 @@ def login_admin():
 
     user = User.query.filter_by(email=email).first()
     roles = user.roles if user and isinstance(user.roles, list) else ([user.roles] if user else [])
-    if not user or 'admin' not in roles or not check_password_hash(user.password_hash, password):
+    if not user or not user.is_active or 'admin' not in roles or not check_password_hash(user.password_hash, password):
         return jsonify({'error': 'Invalid admin email or password'}), 401
 
     return jsonify({
@@ -216,6 +216,9 @@ def login():
     
     if not user or not check_password_hash(user.password_hash, password):
         return jsonify({'error': 'Invalid email or password'}), 401
+
+    if not user.is_active:
+        return jsonify({'error': 'This account is deactivated. Contact an administrator.'}), 403
 
     if not user.email_verified:
         return jsonify({

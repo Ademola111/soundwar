@@ -21,6 +21,7 @@ import {
   Loader2,
   AlertTriangle,
   CalendarClock,
+  CheckCircle2,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
@@ -29,6 +30,12 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   Table,
   TableBody,
@@ -80,10 +87,42 @@ interface AdminUser {
   email: string;
   roles: string[];
   status: string;
+  is_active: boolean;
   songs_count: number;
   votes_received: number;
   votes_cast: number;
   created_at: string | null;
+  artist_profile?: {
+    id: number;
+    stage_name: string;
+    bio?: string | null;
+    genre?: string | null;
+    profile_image?: string | null;
+    is_paid?: boolean;
+    is_verified?: boolean;
+  } | null;
+}
+
+interface AdminPayment {
+  id: number;
+  user_id: number;
+  contest_id: number | null;
+  transaction_id: string;
+  tx_ref: string;
+  amount: number;
+  currency: string;
+  status: "pending" | "successful" | "reversed" | string;
+  payment_type: string | null;
+  payment_purpose: string;
+  created_at: string | null;
+  verified_at: string | null;
+  contest_title: string | null;
+  user: {
+    id: number;
+    name: string;
+    username: string;
+    email: string;
+  } | null;
 }
 
 interface DashboardStats {
@@ -149,12 +188,117 @@ const toDateTimeLocal = (value: string) => {
     .slice(0, 16);
 };
 
+type UserExportFormat = "pdf" | "csv" | "xml" | "excel" | "jpeg";
+type UserExportRow = Record<string, string>;
+
+const getUserRole = (user: AdminUser) =>
+  user.roles.includes("admin") ? "admin" : user.roles.includes("artist") ? "artist" : "voter";
+
+const makeUserExportRows = (users: AdminUser[]): UserExportRow[] =>
+  users.map((user) => ({
+    Name: user.name || user.username,
+    Username: user.username,
+    Email: user.email,
+    Role: getUserRole(user),
+    "Account Status": user.is_active ? "Active" : "Deactivated",
+    "Season Status": user.status.replaceAll("_", " "),
+    Activity: user.roles.includes("artist")
+      ? `${user.songs_count} songs, ${user.votes_received} votes received`
+      : `${user.votes_cast} votes cast`,
+    Joined: user.created_at ? new Date(user.created_at).toLocaleDateString() : "",
+  }));
+
+const escapeXml = (value: string) =>
+  value.replace(/[<>&'"]/g, (character) => ({
+    "<": "&lt;",
+    ">": "&gt;",
+    "&": "&amp;",
+    "'": "&apos;",
+    '"': "&quot;",
+  })[character] || character);
+
+const downloadBlob = (blob: Blob, filename: string) => {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+};
+
+const exportUsersAsJpeg = async (rows: UserExportRow[], filename: string) => {
+  const headers = Object.keys(rows[0] || {
+    Name: "",
+    Username: "",
+    Email: "",
+    Role: "",
+    "Account Status": "",
+    "Season Status": "",
+    Activity: "",
+    Joined: "",
+  });
+  const rowHeight = 42;
+  const canvas = document.createElement("canvas");
+  canvas.width = 1800;
+  canvas.height = Math.max(180, 120 + (rows.length + 1) * rowHeight);
+  const context = canvas.getContext("2d");
+  if (!context) throw new Error("Could not create an image for export.");
+
+  context.fillStyle = "#ffffff";
+  context.fillRect(0, 0, canvas.width, canvas.height);
+  context.fillStyle = "#111827";
+  context.font = "bold 32px Arial";
+  context.fillText("Soundwar User Management", 40, 48);
+  context.fillStyle = "#6b7280";
+  context.font = "18px Arial";
+  context.fillText(`Exported ${new Date().toLocaleString()} · ${rows.length} users`, 40, 80);
+
+  const tableTop = 110;
+  const colWidth = (canvas.width - 80) / headers.length;
+  context.fillStyle = "#e5e7eb";
+  context.fillRect(40, tableTop, canvas.width - 80, rowHeight);
+  context.font = "bold 16px Arial";
+  context.fillStyle = "#111827";
+  headers.forEach((header, index) => {
+    context.fillText(header, 50 + index * colWidth, tableTop + 26, colWidth - 18);
+  });
+
+  context.font = "15px Arial";
+  rows.forEach((row, rowIndex) => {
+    const y = tableTop + (rowIndex + 1) * rowHeight;
+    if (rowIndex % 2 === 1) {
+      context.fillStyle = "#f9fafb";
+      context.fillRect(40, y, canvas.width - 80, rowHeight);
+    }
+    context.fillStyle = "#1f2937";
+    headers.forEach((header, columnIndex) => {
+      context.fillText(row[header] || "", 50 + columnIndex * colWidth, y + 26, colWidth - 18);
+    });
+    context.strokeStyle = "#e5e7eb";
+    context.beginPath();
+    context.moveTo(40, y + rowHeight);
+    context.lineTo(canvas.width - 40, y + rowHeight);
+    context.stroke();
+  });
+
+  const blob = await new Promise<Blob>((resolve, reject) => {
+    canvas.toBlob((result) => {
+      if (result) resolve(result);
+      else reject(new Error("Could not encode the user list as JPEG."));
+    }, "image/jpeg", 0.92);
+  });
+  downloadBlob(blob, filename);
+};
+
 const Admin = () => {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState("overview");
   const [dashboard, setDashboard] = useState<DashboardData | null>(null);
   const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
   const [users, setUsers] = useState<AdminUser[]>([]);
+  const [payments, setPayments] = useState<AdminPayment[]>([]);
   const [isLoadingData, setIsLoadingData] = useState(true);
   const [dataError, setDataError] = useState("");
   const [refreshKey, setRefreshKey] = useState(0);
@@ -168,9 +312,16 @@ const Admin = () => {
   const [isSongActionLoading, setIsSongActionLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [userFilter, setUserFilter] = useState("all");
+  const [paymentFilter, setPaymentFilter] = useState("all");
+  const [selectedUser, setSelectedUser] = useState<AdminUser | null>(null);
+  const [selectedPayment, setSelectedPayment] = useState<AdminPayment | null>(null);
+  const [paymentStatus, setPaymentStatus] = useState<AdminPayment["status"]>("pending");
+  const [isUpdatingUserStatus, setIsUpdatingUserStatus] = useState(false);
+  const [isUpdatingPaymentStatus, setIsUpdatingPaymentStatus] = useState(false);
   const [isTriggeringReminder, setIsTriggeringReminder] = useState(false);
   const [isUpdatingContestPhase, setIsUpdatingContestPhase] = useState(false);
   const [isEditingSeasonDates, setIsEditingSeasonDates] = useState(false);
+  const [isCreatingNewSeason, setIsCreatingNewSeason] = useState(false);
   const [isSavingSeasonDates, setIsSavingSeasonDates] = useState(false);
   const [seasonDateForm, setSeasonDateForm] = useState({
     start_date: "",
@@ -207,21 +358,24 @@ const Admin = () => {
         }
       };
 
-      const [dashboardResult, usersResult, analyticsResult] = await Promise.all([
+      const [dashboardResult, usersResult, analyticsResult, paymentsResult] = await Promise.all([
         fetchData<DashboardData>(API_ENDPOINTS.ADMIN.DASHBOARD),
         fetchData<{ users: AdminUser[] }>(API_ENDPOINTS.ADMIN.USERS),
         fetchData<AnalyticsData>(API_ENDPOINTS.ADMIN.ANALYTICS),
+        fetchData<{ payments: AdminPayment[] }>(API_ENDPOINTS.ADMIN.PAYMENTS),
       ]);
 
       if (controller.signal.aborted) return;
       if (dashboardResult.data) setDashboard(dashboardResult.data);
       if (usersResult.data) setUsers(usersResult.data.users || []);
       if (analyticsResult.data) setAnalytics(analyticsResult.data);
+      if (paymentsResult.data) setPayments(paymentsResult.data.payments || []);
 
       const failures = [
         dashboardResult.error && `Dashboard: ${dashboardResult.error}`,
         usersResult.error && `Users: ${usersResult.error}`,
         analyticsResult.error && `Analytics: ${analyticsResult.error}`,
+        paymentsResult.error && `Payments: ${paymentsResult.error}`,
       ].filter(Boolean);
       setDataError(failures.length ? `Some dashboard data could not be loaded. ${failures.join(" ")}` : "");
       setIsLoadingData(false);
@@ -352,6 +506,85 @@ const Admin = () => {
     }
   };
 
+  const handleUserStatusChange = async (targetUser: AdminUser) => {
+    if (!token) return;
+
+    const is_active = !targetUser.is_active;
+    setIsUpdatingUserStatus(true);
+    try {
+      const response = await fetch(API_ENDPOINTS.ADMIN.USER_STATUS(targetUser.id), {
+        method: "PUT",
+        headers: getAuthHeaders(token),
+        body: JSON.stringify({ is_active }),
+      });
+      const data = await response.json().catch(() => ({})) as { error?: string };
+      if (!response.ok) {
+        throw new Error(data.error || "Could not update this account.");
+      }
+
+      setUsers((currentUsers) => currentUsers.map((currentUser) =>
+        currentUser.id === targetUser.id ? { ...currentUser, is_active } : currentUser,
+      ));
+      setSelectedUser((currentUser) =>
+        currentUser?.id === targetUser.id ? { ...currentUser, is_active } : currentUser,
+      );
+      toast({
+        title: is_active ? "Account activated" : "Account deactivated",
+        description: `${targetUser.name || targetUser.username}'s account is now ${is_active ? "active" : "inactive"}.`,
+      });
+    } catch (error) {
+      toast({
+        title: "Could not update account",
+        description: error instanceof Error ? error.message : "Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsUpdatingUserStatus(false);
+    }
+  };
+
+  const handlePaymentStatusChange = async () => {
+    if (!token || !selectedPayment) return;
+
+    setIsUpdatingPaymentStatus(true);
+    try {
+      const response = await fetch(API_ENDPOINTS.ADMIN.PAYMENT_STATUS(selectedPayment.id), {
+        method: "PUT",
+        headers: getAuthHeaders(token),
+        body: JSON.stringify({ status: paymentStatus }),
+      });
+      const data = await response.json().catch(() => ({})) as {
+        error?: string;
+        payment?: AdminPayment;
+      };
+      if (!response.ok) {
+        throw new Error(data.error || "Could not update this payment.");
+      }
+
+      if (!data.payment) {
+        throw new Error("Server response did not include the updated payment.");
+      }
+      const updatedPayment = data.payment;
+      setPayments((currentPayments) => currentPayments.map((payment) =>
+        payment.id === updatedPayment.id ? updatedPayment : payment,
+      ));
+      setRefreshKey((key) => key + 1);
+      toast({
+        title: "Payment status updated",
+        description: `Payment #${selectedPayment.id} is now ${paymentStatus}.`,
+      });
+      setSelectedPayment(null);
+    } catch (error) {
+      toast({
+        title: "Could not update payment",
+        description: error instanceof Error ? error.message : "Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsUpdatingPaymentStatus(false);
+    }
+  };
+
   const getStatusBadge = (status: string) => {
     switch (status) {
       case "active":
@@ -385,9 +618,130 @@ const Admin = () => {
       user.username.toLowerCase().includes(searchQuery.toLowerCase()) ||
       user.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
       user.name.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesFilter = userFilter === "all" || role === userFilter || user.status === userFilter;
+    const matchesFilter = userFilter === "all"
+      || role === userFilter
+      || (userFilter === "active" && user.is_active);
     return matchesSearch && matchesFilter;
   });
+  const filteredPayments = payments.filter((payment) =>
+    paymentFilter === "all" || payment.status === paymentFilter,
+  );
+
+  const exportUsers = async (format: UserExportFormat) => {
+    const rows = makeUserExportRows(filteredUsers);
+    const timestamp = new Date().toISOString().slice(0, 10);
+    const baseFilename = `soundwar-users-${timestamp}`;
+    const headers = Object.keys(rows[0] || {
+      Name: "",
+      Username: "",
+      Email: "",
+      Role: "",
+      "Account Status": "",
+      "Season Status": "",
+      Activity: "",
+      Joined: "",
+    });
+
+    try {
+      if (format === "csv") {
+        const csv = [
+          headers.join(","),
+          ...rows.map((row) => headers.map((header) => {
+            const value = row[header] || "";
+            const safeValue = /^\s*[=+\-@]/.test(value) ? `'${value}` : value;
+            return `"${safeValue.replaceAll('"', '""')}"`;
+          }).join(",")),
+        ].join("\r\n");
+        downloadBlob(new Blob(["\uFEFF", csv], { type: "text/csv;charset=utf-8" }), `${baseFilename}.csv`);
+      } else if (format === "xml") {
+        const xmlRows = rows.map((row) =>
+          `  <user>\n${headers.map((header) =>
+            `    <${header.replaceAll(" ", "")}>${escapeXml(row[header] || "")}</${header.replaceAll(" ", "")}>`,
+          ).join("\n")}\n  </user>`,
+        );
+        const xml = `<?xml version="1.0" encoding="UTF-8"?>\n<users>\n${xmlRows.join("\n")}\n</users>`;
+        downloadBlob(new Blob([xml], { type: "application/xml;charset=utf-8" }), `${baseFilename}.xml`);
+      } else if (format === "excel") {
+        const workbookRows = [
+          `<Row>${headers.map((header) => `<Cell><Data ss:Type="String">${escapeXml(header)}</Data></Cell>`).join("")}</Row>`,
+          ...rows.map((row) =>
+            `<Row>${headers.map((header) => `<Cell><Data ss:Type="String">${escapeXml(row[header] || "")}</Data></Cell>`).join("")}</Row>`,
+          ),
+        ];
+        const workbook = `<?xml version="1.0"?><?mso-application progid="Excel.Sheet"?>\n<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"><Worksheet ss:Name="Users"><Table>${workbookRows.join("")}</Table></Worksheet></Workbook>`;
+        downloadBlob(new Blob([workbook], { type: "application/vnd.ms-excel;charset=utf-8" }), `${baseFilename}.xls`);
+      } else if (format === "jpeg") {
+        await exportUsersAsJpeg(rows, `${baseFilename}.jpg`);
+      } else {
+        const { jsPDF } = await import("jspdf");
+        const document = new jsPDF({ orientation: "landscape", unit: "pt", format: "a4" });
+        const pageWidth = document.internal.pageSize.getWidth();
+        const pageHeight = document.internal.pageSize.getHeight();
+        const columnWidths = [95, 80, 150, 50, 75, 90, 135, 65];
+        const startX = 28;
+        const tableWidth = columnWidths.reduce((sum, width) => sum + width, 0);
+        const scale = Math.min(1, (pageWidth - startX * 2) / tableWidth);
+        const widths = columnWidths.map((width) => width * scale);
+        const rowHeight = 24;
+        let y = 58;
+
+        const drawHeader = () => {
+          document.setFillColor(229, 231, 235);
+          document.rect(startX, y - 15, pageWidth - startX * 2, rowHeight, "F");
+          document.setFont("helvetica", "bold");
+          document.setFontSize(7);
+          let x = startX + 5;
+          headers.forEach((header, index) => {
+            document.text(header, x, y, { maxWidth: widths[index] - 8 });
+            x += widths[index];
+          });
+          y += rowHeight;
+          document.setFont("helvetica", "normal");
+        };
+
+        document.setFont("helvetica", "bold");
+        document.setFontSize(15);
+        document.text("Soundwar User Management", startX, 28);
+        document.setFont("helvetica", "normal");
+        document.setFontSize(8);
+        document.text(`Exported ${new Date().toLocaleString()} | ${rows.length} users`, startX, 42);
+        drawHeader();
+
+        rows.forEach((row, rowIndex) => {
+          if (y + rowHeight > pageHeight - 24) {
+            document.addPage();
+            y = 40;
+            drawHeader();
+          }
+          if (rowIndex % 2 === 1) {
+            document.setFillColor(249, 250, 251);
+            document.rect(startX, y - 15, pageWidth - startX * 2, rowHeight, "F");
+          }
+          document.setFontSize(7);
+          let x = startX + 5;
+          headers.forEach((header, index) => {
+            const value = row[header] || "";
+            const maxCharacters = Math.max(5, Math.floor((widths[index] - 8) / 3.6));
+            const clippedValue = value.length > maxCharacters
+              ? `${value.slice(0, maxCharacters - 3)}...`
+              : value;
+            document.text(clippedValue, x, y, { maxWidth: widths[index] - 8 });
+            x += widths[index];
+          });
+          y += rowHeight;
+        });
+
+        downloadBlob(document.output("blob"), `${baseFilename}.pdf`);
+      }
+      toast({ title: "User list exported", description: `Downloaded ${baseFilename}.${format === "excel" ? "xls" : format === "jpeg" ? "jpg" : format}.` });
+    } catch (error) {
+      toast({
+        title: "Could not export users",
+        description: error instanceof Error ? error.message : "Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
 
   const contest = dashboard?.current_contest;
   const contestStart = contest ? new Date(contest.start_date).getTime() : 0;
@@ -467,7 +821,68 @@ const Admin = () => {
       submission_end_date: toDateTimeLocal(contest.submission_end_date),
       voting_end_date: toDateTimeLocal(contest.voting_end_date),
     });
+    setIsCreatingNewSeason(false);
     setIsEditingSeasonDates(true);
+  };
+
+  const openSeasonCreationDialog = () => {
+    setSeasonDateForm({
+      start_date: "",
+      submission_end_date: "",
+      voting_end_date: "",
+    });
+    setIsEditingSeasonDates(false);
+    setIsCreatingNewSeason(true);
+  };
+
+  const saveNewSeason = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!token) return;
+
+    const { start_date, submission_end_date, voting_end_date } = seasonDateForm;
+    if (!start_date || !submission_end_date || !voting_end_date || !(start_date < submission_end_date && submission_end_date < voting_end_date)) {
+      toast({
+        title: "Invalid season schedule",
+        description: "Set the season start before submission closes, and submission close before voting ends.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsSavingSeasonDates(true);
+    try {
+      const response = await fetch(API_ENDPOINTS.ADMIN.CONTESTS, {
+        method: "POST",
+        headers: getAuthHeaders(token),
+        body: JSON.stringify({
+          start_date: `${start_date}:00`,
+          submission_end_date: `${submission_end_date}:00`,
+          voting_end_date: `${voting_end_date}:00`,
+        }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(data.error || "Could not create a new season.");
+      }
+      if (!data.contest?.title) {
+        throw new Error("Server response did not include the new season details.");
+      }
+
+      toast({
+        title: "New season created",
+        description: `${data.contest.title} is now the active season.`,
+      });
+      setIsCreatingNewSeason(false);
+      setRefreshKey((key) => key + 1);
+    } catch (error) {
+      toast({
+        title: "Could not create new season",
+        description: error instanceof Error ? error.message : "Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSavingSeasonDates(false);
+    }
   };
 
   const saveSeasonDates = async (event: React.FormEvent<HTMLFormElement>) => {
@@ -662,6 +1077,12 @@ const Admin = () => {
                   )}
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
+                  {(!contest || contest.phase === "completed") && (
+                    <Button onClick={openSeasonCreationDialog}>
+                      <CalendarClock className="mr-2 h-4 w-4" />
+                      Create New Season
+                    </Button>
+                  )}
                   {contest && (
                     <Button variant="outline" onClick={openSeasonDateEditor}>
                       <CalendarClock className="mr-2 h-4 w-4" />Edit dates
@@ -961,14 +1382,24 @@ const Admin = () => {
                           <SelectItem value="user">Voters Only</SelectItem>
                           <SelectItem value="artist">Artists Only</SelectItem>
                           <SelectItem value="admin">Admins Only</SelectItem>
-                          <SelectItem value="active">Active</SelectItem>
-                          <SelectItem value="pending_payment">Pending Payment</SelectItem>
+                          <SelectItem value="active">Active Only</SelectItem>
                         </SelectContent>
                       </Select>
-                      <Button variant="outline">
-                        <Download className="h-4 w-4 mr-2" />
-                        Export
-                      </Button>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="outline" disabled={isLoadingData}>
+                            <Download className="h-4 w-4 mr-2" />
+                            Export
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem onSelect={() => void exportUsers("pdf")}>Export as PDF</DropdownMenuItem>
+                          <DropdownMenuItem onSelect={() => void exportUsers("csv")}>Export as CSV</DropdownMenuItem>
+                          <DropdownMenuItem onSelect={() => void exportUsers("xml")}>Export as XML</DropdownMenuItem>
+                          <DropdownMenuItem onSelect={() => void exportUsers("excel")}>Export as Excel (.xls)</DropdownMenuItem>
+                          <DropdownMenuItem onSelect={() => void exportUsers("jpeg")}>Export as JPEG</DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </div>
                   </div>
                 </CardHeader>
@@ -999,7 +1430,17 @@ const Admin = () => {
                             <div className="text-xs text-muted-foreground">{user.email}</div>
                           </TableCell>
                           <TableCell>{getRoleBadge(role)}</TableCell>
-                          <TableCell>{getStatusBadge(user.status)}</TableCell>
+                          <TableCell>
+                            <div className="flex flex-col items-start gap-1">
+                              <Badge className={user.is_active
+                                ? "bg-green-500/20 text-green-400 border-green-500/30"
+                                : "bg-destructive/20 text-destructive border-destructive/30"}
+                              >
+                                {user.is_active ? "Account active" : "Account inactive"}
+                              </Badge>
+                              {getStatusBadge(user.status)}
+                            </div>
+                          </TableCell>
                           <TableCell className="text-muted-foreground">
                             {role === "artist"
                               ? `${user.songs_count} songs • ${user.votes_received} votes`
@@ -1011,10 +1452,21 @@ const Admin = () => {
                           </TableCell>
                           <TableCell className="text-right">
                             <div className="flex justify-end gap-2">
-                              <Button size="sm" variant="outline">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                aria-label={`View ${user.name || user.username} profile`}
+                                onClick={() => setSelectedUser(user)}
+                              >
                                 <Eye className="h-4 w-4" />
                               </Button>
-                              <Button size="sm" variant="outline">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                aria-label={`Manage ${user.name || user.username} settings`}
+                                title="Account settings"
+                                disabled
+                              >
                                 <Settings className="h-4 w-4" />
                               </Button>
                             </div>
@@ -1024,6 +1476,103 @@ const Admin = () => {
                       })}
                     </TableBody>
                   </Table>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="glass border-border/50 mt-6">
+                <CardHeader>
+                  <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <CardTitle>Payment Management</CardTitle>
+                      <CardDescription>Review payment records and update their status.</CardDescription>
+                    </div>
+                    <Select value={paymentFilter} onValueChange={setPaymentFilter}>
+                      <SelectTrigger className="w-48">
+                        <Filter className="mr-2 h-4 w-4" />
+                        <SelectValue placeholder="Filter payments" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Payments</SelectItem>
+                        <SelectItem value="pending">Pending Payments</SelectItem>
+                        <SelectItem value="successful">Successful Payments</SelectItem>
+                        <SelectItem value="reversed">Reversed Payments</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="overflow-x-auto">
+                    <Table className="min-w-[760px]">
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Payment</TableHead>
+                          <TableHead>User</TableHead>
+                          <TableHead>Season</TableHead>
+                          <TableHead>Amount</TableHead>
+                          <TableHead>Status</TableHead>
+                          <TableHead>Created</TableHead>
+                          <TableHead className="text-right">Actions</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {isLoadingData ? (
+                          <TableRow><TableCell colSpan={7} className="py-10 text-center text-muted-foreground">Loading payments...</TableCell></TableRow>
+                        ) : filteredPayments.length === 0 ? (
+                          <TableRow><TableCell colSpan={7} className="py-10 text-center text-muted-foreground">No matching payments found.</TableCell></TableRow>
+                        ) : filteredPayments.map((payment) => (
+                          <TableRow key={payment.id}>
+                            <TableCell>
+                              <div className="font-medium">#{payment.id}</div>
+                              <div className="text-xs text-muted-foreground">{payment.tx_ref}</div>
+                            </TableCell>
+                            <TableCell>
+                              <div className="font-medium">{payment.user?.name || payment.user?.username || "Unknown user"}</div>
+                              <div className="text-xs text-muted-foreground">{payment.user?.email || "—"}</div>
+                            </TableCell>
+                            <TableCell>{payment.contest_title || "—"}</TableCell>
+                            <TableCell>{formatNaira(payment.amount)}</TableCell>
+                            <TableCell>
+                              <Badge variant={payment.status === "successful" ? "default" : payment.status === "reversed" ? "destructive" : "secondary"}>
+                                {payment.status}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="text-muted-foreground">
+                              {payment.created_at ? new Date(payment.created_at).toLocaleDateString() : "—"}
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <div className="flex justify-end gap-2">
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  aria-label={`Edit payment ${payment.id}`}
+                                  title="View/edit payment"
+                                  onClick={() => {
+                                    setSelectedPayment(payment);
+                                    setPaymentStatus(
+                                      payment.status === "successful" || payment.status === "reversed"
+                                        ? payment.status
+                                        : "pending",
+                                    );
+                                  }}
+                                >
+                                  <Eye className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  aria-label={`Manage payment ${payment.id} settings`}
+                                  title="Payment settings"
+                                  disabled
+                                >
+                                  <Settings className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
                   </div>
                 </CardContent>
               </Card>
@@ -1114,15 +1663,25 @@ const Admin = () => {
         </motion.div>
       </main>
 
-      <Dialog open={isEditingSeasonDates} onOpenChange={setIsEditingSeasonDates}>
+      <Dialog
+        open={isEditingSeasonDates || isCreatingNewSeason}
+        onOpenChange={(open) => {
+          if (!open) {
+            setIsEditingSeasonDates(false);
+            setIsCreatingNewSeason(false);
+          }
+        }}
+      >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Edit {contest?.title || "season"} dates</DialogTitle>
+            <DialogTitle>
+              {isCreatingNewSeason ? "Create New Season" : `Edit ${contest?.title || "season"} dates`}
+            </DialogTitle>
             <DialogDescription>
               Set the season start, submission close, and voting end in chronological order.
             </DialogDescription>
           </DialogHeader>
-          <form onSubmit={saveSeasonDates} className="space-y-4">
+          <form onSubmit={isCreatingNewSeason ? saveNewSeason : saveSeasonDates} className="space-y-4">
             <label className="block space-y-2 text-sm">
               <span>Season starts</span>
               <Input
@@ -1151,15 +1710,137 @@ const Admin = () => {
               />
             </label>
             <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setIsEditingSeasonDates(false)} disabled={isSavingSeasonDates}>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setIsEditingSeasonDates(false);
+                  setIsCreatingNewSeason(false);
+                }}
+                disabled={isSavingSeasonDates}
+              >
                 Cancel
               </Button>
               <Button type="submit" disabled={isSavingSeasonDates}>
                 {isSavingSeasonDates && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                {isSavingSeasonDates ? "Saving..." : "Save dates"}
+                {isSavingSeasonDates ? "Saving..." : isCreatingNewSeason ? "Create season" : "Save dates"}
               </Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!selectedUser} onOpenChange={(open) => !open && setSelectedUser(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{selectedUser?.name || selectedUser?.username} profile</DialogTitle>
+            <DialogDescription>Account details and administrator controls.</DialogDescription>
+          </DialogHeader>
+          {selectedUser && (
+            <div className="space-y-4">
+              <div className="rounded-lg border border-border/60 bg-secondary/30 p-4">
+                <dl className="grid gap-3 text-sm sm:grid-cols-2">
+                  <div><dt className="text-muted-foreground">Username</dt><dd className="font-medium">@{selectedUser.username}</dd></div>
+                  <div><dt className="text-muted-foreground">Email</dt><dd className="font-medium break-all">{selectedUser.email}</dd></div>
+                  <div><dt className="text-muted-foreground">Role</dt><dd>{selectedUser.roles.join(", ") || "user"}</dd></div>
+                  <div><dt className="text-muted-foreground">Joined</dt><dd>{selectedUser.created_at ? new Date(selectedUser.created_at).toLocaleString() : "—"}</dd></div>
+                  <div><dt className="text-muted-foreground">Account status</dt><dd>{selectedUser.is_active ? "Active" : "Deactivated"}</dd></div>
+                </dl>
+              </div>
+              {selectedUser.artist_profile && (
+                <div className="rounded-lg border border-border/60 p-4">
+                  <h3 className="mb-2 font-semibold">Artist profile</h3>
+                  <p className="text-sm"><span className="text-muted-foreground">Stage name:</span> {selectedUser.artist_profile.stage_name}</p>
+                  {selectedUser.artist_profile.genre && (
+                    <p className="text-sm"><span className="text-muted-foreground">Genre:</span> {selectedUser.artist_profile.genre}</p>
+                  )}
+                  {selectedUser.artist_profile.bio && (
+                    <p className="mt-2 text-sm text-muted-foreground">{selectedUser.artist_profile.bio}</p>
+                  )}
+                  <p className="mt-2 text-sm">
+                    Payment: {selectedUser.artist_profile.is_paid ? "Paid" : "Not paid"}
+                    {selectedUser.artist_profile.is_verified ? " · Verified" : ""}
+                  </p>
+                </div>
+              )}
+              <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
+                <span>{selectedUser.songs_count} songs</span>
+                <span>{selectedUser.votes_received} votes received</span>
+                <span>{selectedUser.votes_cast} votes cast</span>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSelectedUser(null)}>Close</Button>
+            {selectedUser && (
+              <Button
+                variant={selectedUser.is_active ? "destructive" : "default"}
+                onClick={() => void handleUserStatusChange(selectedUser)}
+                disabled={
+                  isUpdatingUserStatus ||
+                  (selectedUser.is_active && String(selectedUser.id) === user?.id)
+                }
+              >
+                {isUpdatingUserStatus
+                  ? <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  : selectedUser.is_active
+                    ? <XCircle className="mr-2 h-4 w-4" />
+                    : <CheckCircle2 className="mr-2 h-4 w-4" />}
+                {selectedUser.is_active ? "Deactivate account" : "Activate account"}
+              </Button>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={!!selectedPayment}
+        onOpenChange={(open) => !open && setSelectedPayment(null)}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Payment Status</DialogTitle>
+            <DialogDescription>
+              Update the recorded status for payment #{selectedPayment?.id}.
+            </DialogDescription>
+          </DialogHeader>
+          {selectedPayment && (
+            <div className="space-y-4">
+              <div className="rounded-lg border border-border/60 bg-secondary/30 p-4 text-sm">
+                <p className="font-medium">{selectedPayment.user?.name || selectedPayment.user?.username || "Unknown user"}</p>
+                <p className="text-muted-foreground">{selectedPayment.user?.email || "—"}</p>
+                <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                  <p><span className="text-muted-foreground">Amount:</span> {formatNaira(selectedPayment.amount)}</p>
+                  <p><span className="text-muted-foreground">Season:</span> {selectedPayment.contest_title || "—"}</p>
+                  <p><span className="text-muted-foreground">Reference:</span> {selectedPayment.tx_ref}</p>
+                  <p><span className="text-muted-foreground">Created:</span> {selectedPayment.created_at ? new Date(selectedPayment.created_at).toLocaleString() : "—"}</p>
+                </div>
+              </div>
+              <label className="block space-y-2 text-sm">
+                <span>Payment status</span>
+                <Select value={paymentStatus} onValueChange={setPaymentStatus}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="pending">Pending</SelectItem>
+                    <SelectItem value="successful">Successful</SelectItem>
+                    <SelectItem value="reversed">Reversed</SelectItem>
+                  </SelectContent>
+                </Select>
+              </label>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSelectedPayment(null)} disabled={isUpdatingPaymentStatus}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => void handlePaymentStatusChange()}
+              disabled={!selectedPayment || isUpdatingPaymentStatus || paymentStatus === selectedPayment.status}
+            >
+              {isUpdatingPaymentStatus && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Save status
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 

@@ -98,6 +98,19 @@ class Artist(db.Model):
             contest_id=contest.id
         ).first()
 
+    def has_participated_in_previous_contest(self, contest):
+        """Check whether the artist submitted a song in an earlier contest."""
+        if contest is None:
+            return False
+
+        from .contest import Contest
+        from .song import Song
+
+        return Song.query.join(Contest, Song.contest_id == Contest.id).filter(
+            Song.artist_id == self.id,
+            Contest.start_date < contest.start_date,
+        ).first() is not None
+
     def has_paid_for_contest(self, contest):
         """Return True only if this artist has a successful payment for the given contest."""
         if contest is None:
@@ -115,7 +128,17 @@ class Artist(db.Model):
                 return payment is not None
             return False
 
-        # Backward-compatible legacy support: older data may only have artist.is_paid.
+        # Returning artists must pay for each season; only first-time artists use
+        # the legacy profile-level payment flags.
+        if self.has_participated_in_previous_contest(contest):
+            from .payment import Payment
+
+            return Payment.query.filter_by(
+                user_id=self.user_id,
+                contest_id=contest.id,
+                status='successful'
+            ).first() is not None
+
         return bool(self.is_paid or self.is_verified)
 
     def can_participate_in_contest(self, contest):
@@ -128,12 +151,20 @@ class Artist(db.Model):
 
         entry = self.get_contest_entry(contest)
         if not entry:
+            if self.has_participated_in_previous_contest(contest):
+                return self.has_paid_for_contest(contest)
             return bool(self.is_paid and self.is_verified)
 
         return bool(entry.is_paid and entry.is_verified and entry.status in ('approved', 'pending_approval'))
 
     def to_dict(self):
         """Convert to dictionary for JSON response"""
+        from .contest import Contest
+
+        current_contest = Contest.get_current()
+        is_returning_artist = self.has_participated_in_previous_contest(current_contest)
+        has_paid_for_current_contest = self.has_paid_for_contest(current_contest)
+
         return {
             'id': self.id,
             'user_id': self.user_id,
@@ -143,6 +174,11 @@ class Artist(db.Model):
             'profile_image': self.profile_image,
             'is_paid': self.is_paid,
             'is_verified': self.is_verified,
+            'is_returning_artist': is_returning_artist,
+            'has_paid_for_current_contest': has_paid_for_current_contest,
+            'requires_season_payment': bool(
+                current_contest and is_returning_artist and not has_paid_for_current_contest
+            ),
             'is_past_winner': self.is_past_winner(),
             'can_participate': self.can_participate(),
             'months_until_eligible': self.months_until_eligible(),

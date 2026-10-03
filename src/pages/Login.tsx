@@ -60,7 +60,10 @@ const Login = () => {
         description: "You have successfully logged in.",
       });
 
-      if (data?.user?.artist_profile && !data.user.artist_profile.is_paid) {
+      if (
+        data?.user?.artist_profile &&
+        (!data.user.artist_profile.is_paid || data.user.artist_profile.requires_season_payment)
+      ) {
         toast({
           title: "Artist registration pending",
           description: "Complete payment before uploading your track.",

@@ -157,8 +157,16 @@ const ArtistProfile = () => {
                   <h2 className="font-display text-xl font-bold mt-4">{stageName || "Your stage name"}</h2>
                   <p className="text-sm text-muted-foreground mt-1">{genre || "Genre not set"}</p>
                   <div className="mt-4 flex items-center gap-2">
-                    <span className={`w-2 h-2 rounded-full ${artist.is_paid ? "bg-green-500" : "bg-yellow-500"}`} />
-                    <span className="text-xs text-muted-foreground">{artist.is_paid ? "Registration paid" : "Payment pending"}</span>
+                    <span className={`w-2 h-2 rounded-full ${artist.requires_season_payment ? "bg-yellow-500" : "bg-green-500"}`} />
+                    <span className="text-xs text-muted-foreground">
+                      {artist.requires_season_payment
+                        ? "Current season payment pending"
+                        : artist.is_returning_artist && artist.has_paid_for_current_contest
+                          ? "Current season payment complete"
+                          : artist.is_paid
+                            ? "Registration paid"
+                            : "Payment pending"}
+                    </span>
                   </div>
                 </div>
                 <div className="px-1 text-sm text-muted-foreground space-y-1">
